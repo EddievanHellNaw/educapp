@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "914350889360",
+    "project_id": "educapp-4c337",
+    "storage_bucket": "educapp-4c337.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:914350889360:android:fe32c4071b0f075e6ebb15",
+        "android_client_info": {
+          "package_name": "com.example.educapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "914350889360-1k2qk2ge2h4teb4o650nfmvoflgifvds.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.educapp",
+            "certificate_hash": "413b01f0fdc28cd4d2916d2ed2776f59fdadc824"
+          }
+        },
+        {
+          "client_id": "914350889360-e3pbq8o21p01afhou99nfark61g4ltr8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbpfZLfVXMLHftGdVJDVeTYSOV_GxgOUA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "914350889360-e3pbq8o21p01afhou99nfark61g4ltr8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
