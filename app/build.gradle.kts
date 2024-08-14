@@ -63,6 +63,8 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("androidx.navigation:navigation-compose:2.7.2")
+    implementation("com.google.firebase:firebase-auth-ktx")
 
 }
 
