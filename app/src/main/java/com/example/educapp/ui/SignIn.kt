@@ -36,6 +36,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.firebase.auth.FirebaseAuthException
 
 class SignInViewModel : ViewModel() {
     var email by mutableStateOf("")
@@ -45,29 +46,44 @@ class SignInViewModel : ViewModel() {
     var showError by mutableStateOf("")
     var deepLink by mutableStateOf<String?>(null)
     val auth = Firebase.auth
+
+    fun handleDeepLink(deepLink: String) {
+        if (auth.isSignInWithEmailLink(deepLink)) {
+            val email = Uri.parse(deepLink).getQueryParameter("email") ?: ""
+            auth.signInWithEmailLink(email, deepLink)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        signInStep = SignInStep.SelectRole
+                    } else {
+                        val errorCode = (task.exception as? FirebaseAuthException)?.errorCode
+                        showError = when (errorCode) {
+                            "ERROR_INVALID_EMAIL" -> "Invalid email format"
+                            "ERROR_USER_DISABLED" -> "User account disabled"
+                            // Handle different error codes
+                            // ...
+                            else -> "Error during sign-in"
+                        }
+                    }
+                }
+        }
+    }
 }
+
 
 @Composable
 fun SignInScreen(navController: NavController) {
     val viewModel = viewModel<SignInViewModel>()
     val context = LocalContext.current
     val activity = context as Activity
+    val deepLink = remember { mutableStateOf<Uri?>(null) }
 
-    LaunchedEffect(key1 = viewModel.deepLink) { // Observe deepLink in ViewModel
-        viewModel.deepLink?.let { deepLink ->
-            if (viewModel.auth.isSignInWithEmailLink(deepLink)) {
-                val email = Uri.parse(deepLink).getQueryParameter("email") ?: ""
-                viewModel.auth.signInWithEmailLink(email, deepLink)
-                    .addOnCompleteListener(activity) { task ->
-                        if (task.isSuccessful) {
-                            viewModel.signInStep = SignInStep.SelectRole
-                        } else {
-                            viewModel.showError = "Error during sign-in"
-                        }
-                    }
-                viewModel.deepLink = null // Reset deep link after handling
-            }
+    LaunchedEffect(Unit) {
+        deepLink.value = activity.intent?.data
+    }
 
+    LaunchedEffect(key1 = deepLink.value) {
+        deepLink.value?.let {
+            viewModel.handleDeepLink(it.toString())
         }
     }
 
@@ -122,7 +138,7 @@ fun SignInScreen(navController: NavController) {
                     }
                 }
                 SignInStep.ConfirmEmail -> {
-                    Text("Check your email for a confirmation link")
+                    Text("We have sent an email to confirm your address. Please check it before proceeding")
                     // You might want to add a button to resend the email if needed
                 }
                 SignInStep.SelectRole -> {
@@ -187,7 +203,7 @@ fun isValidPassword(password: String): Boolean {
 fun RoleImage(imageResId: Int) {
     Image(
         painter = painterResource(id = imageResId),
-        contentDescription = null, // Provide a description if needed
+        contentDescription = "The picture of the role", // Provide a description if needed
         modifier = Modifier.size(24.dp) // Adjust size as needed
     )
 }
