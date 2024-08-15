@@ -1,12 +1,9 @@
 package com.example.educapp.ui
 
-import android.app.Activity
-import android.net.Uri
-import android.service.controls.ControlsProviderService.TAG
-import android.util.Log
+import android.content.Context
+import androidx.activity.result.launch
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,35 +15,32 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.example.educapp.R
-import com.google.firebase.auth.ActionCodeSettings
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import androidx.lifecycle.viewmodel.compose.viewModel
-
-import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.UserProfileChangeRequest
+import kotlinx.coroutines.launch
 
-class RegistrationViewModel : ViewModel() {
+class RegistrationViewModel(private val context: Context) : ViewModel() {
     private val auth = Firebase.auth
+    var role by mutableStateOf<UserRole?>(null)
 
-    fun registerUser(name: String, email: String, password: String, onResult: (Boolean) -> Unit) {
+    fun registerUser(name: String, email: String, password: String, role: UserRole, onResult: (Boolean) -> Unit) {
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
@@ -56,6 +50,9 @@ class RegistrationViewModel : ViewModel() {
                         .setDisplayName(name)
                         .build()
                     user?.updateProfile(profileUpdates)
+                    viewModelScope.launch {
+                        UserPreferencesRepository.saveRole(context, role)
+                    }
                     onResult(true)
                 } else {
                     onResult(false)
@@ -64,13 +61,26 @@ class RegistrationViewModel : ViewModel() {
     }
 }
 
+class RegistrationViewModelFactory(private val context: Context) :
+    ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(RegistrationViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return RegistrationViewModel(context) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
 @Composable
 fun RegistrationScreen(navController: NavController) {
-    val viewModel = viewModel<RegistrationViewModel>()
+    val context = LocalContext.current
+    val viewModel = viewModel<RegistrationViewModel>(factory = RegistrationViewModelFactory(context))
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var showRoleSelection by remember { mutableStateOf(false) }
 
     fun validateInput(name: String, email: String, password: String, confirmPassword: String): Boolean {
         if (name.isBlank() || email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
@@ -106,21 +116,64 @@ fun RegistrationScreen(navController: NavController) {
         )
         Button(onClick = {
             if (validateInput(name, email, password, confirmPassword)) {
-                viewModel.registerUser(name, email, password) { success ->
-                    if (success) {
-                        navController.navigate("role_selection")
-                    } else {
-                        // Handle registration error
-                    }
-                }
+                showRoleSelection = true
             } else {
                 // Handle validation error
             }
         }) {
-            Text("Register")
+            Text("Next")
+        }
+
+        if (showRoleSelection) {
+            RoleSelectionScreen(viewModel)
+
+            // Show the Register button only if a role is selected
+            if (viewModel.role != null) {
+                Button(onClick = {
+                    viewModel.registerUser(name, email, password, viewModel.role!!) { success ->
+                        if (success) {
+                            // Navigate to the appropriate main screen based on the selected role
+                            when (viewModel.role) {
+                                UserRole.TEACHER -> navController.navigate("teacher_main")
+                                UserRole.STUDENT -> navController.navigate("student_main")
+                                else -> {} // Should not happen, but handle for safety
+                            }
+                        } else {
+                            // Handle registration error
+                        }
+                    }
+                }) {
+                    Text("Register")
+                }
+            }
         }
     }
+}
 
+@Composable
+fun RoleButton(role: UserRole, imageResId: Int, onRoleSelect: () -> Unit) {
+    Button(onClick = onRoleSelect) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = painterResource(id = imageResId),
+                contentDescription = "Role Image",
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(role.name)
+        }
+    }
+}
 
-
+@Composable
+fun RoleSelectionScreen(viewModel: RegistrationViewModel) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        RoleButton(UserRole.TEACHER, R.drawable.teacher_image) { viewModel.role = UserRole.TEACHER }
+        Spacer(modifier = Modifier.height(16.dp))
+        RoleButton(UserRole.STUDENT, R.drawable.student_image) { viewModel.role = UserRole.STUDENT }
+    }
 }
