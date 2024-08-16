@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.educapp.ui.auth.WelcomeScreen
 
 
 class MainActivity : ComponentActivity() {
@@ -25,8 +26,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = "splash") {
-        composable("splash") { SplashScreen(navController) }
+    NavHost(navController = navController, startDestination = "welcome") {
+        composable("welcome") { WelcomeScreen(navController) }
         composable("registration") { RegistrationScreen(navController) }
+        composable("login") { LoginScreen(navController) }
+        composable("teacher_main") { TeacherMainScreen() }
+        composable("student_main") { StudentMainScreen() }
     }
 }
