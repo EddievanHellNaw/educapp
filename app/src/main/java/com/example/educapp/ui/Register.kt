@@ -59,22 +59,19 @@ class RegistrationViewModel(private val context: Context) : ViewModel() {
                 val authResult = auth.createUserWithEmailAndPassword(email, password).await()
                 val user = authResult.user
                 if (user != null) {
+                    val profileUpdates = UserProfileChangeRequest.Builder()
+                        .setDisplayName(name)
+                        .build()
+                    user.updateProfile(profileUpdates).await()
+
                     val userRef = db.collection("users").document(user.uid)
-                    userRef.set(hashMapOf("role" to role.name, "username" to name)).await() // Store username
+                    userRef.set(hashMapOf("role" to role.name, "username" to name, "email" to email)).await() // Save all data at once
+
+                    UserPreferencesRepository.saveRole(context, role)
                     onResult(true)
                 } else {
                     onResult(false)
                 }
-                val profileUpdates = UserProfileChangeRequest.Builder()
-                    .setDisplayName(name)
-                    .build()
-                user?.updateProfile(profileUpdates)?.await()
-
-                val userRef = db.collection("users").document(user!!.uid)
-                userRef.set(hashMapOf("role" to role.name)).await()
-
-                UserPreferencesRepository.saveRole(context, role)
-                onResult(true)
             } catch (e: Exception) {
                 onResult(false)
             }
@@ -92,12 +89,8 @@ class RegistrationViewModel(private val context: Context) : ViewModel() {
                 }
 
                 if (email != null) {
-                    val authResult = auth.signInWithEmailAndPassword(email, password).await()
-                    if (authResult != null) {
-                        onResult(true)
-                    } else {
-                        onResult(false)
-                    }
+                    auth.signInWithEmailAndPassword(email, password).await()
+                    onResult(true) // Call onResult after successful login
                 } else {
                     onResult(false)
                 }

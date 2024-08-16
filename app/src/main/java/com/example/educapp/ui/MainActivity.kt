@@ -30,7 +30,7 @@ fun MainScreen() {
         composable("welcome") { WelcomeScreen(navController) }
         composable("registration") { RegistrationScreen(navController) }
         composable("login") { LoginScreen(navController) }
-        composable("teacher_main") { TeacherMainScreen() }
-        composable("student_main") { StudentMainScreen() }
+        composable("teacher_main") { TeacherMainScreen(navController) }
+        composable("student_main") { StudentMainScreen(navController) }
     }
 }

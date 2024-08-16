@@ -1,5 +1,6 @@
 package com.example.educapp.ui
 
+import androidx.activity.result.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 
@@ -32,7 +34,7 @@ fun LoginScreen(navController: NavController) {
     val context = LocalContext.current
     val viewModel = viewModel<RegistrationViewModel>(
         factory = RegistrationViewModelFactory(context)
-    ) // Assuming RegistrationViewModel has loginUser and getUserRole
+    )
     var usernameEmail by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loginSuccess by remember { mutableStateOf<Boolean?>(null) }
@@ -78,7 +80,7 @@ fun LoginScreen(navController: NavController) {
                     if (usernameEmail.isNotBlank() && password.isNotBlank()) {
                         loginState = LoginState.LoggingIn
                     } else {
-                        // Handle validation error (e.g., show a Snackbar)
+
                     }
                 }) {
                     Text("Next")
