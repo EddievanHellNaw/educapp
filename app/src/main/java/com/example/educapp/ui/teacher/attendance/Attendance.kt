@@ -51,6 +51,9 @@ fun AttendanceScreen(viewModel: AttendanceViewModel, navController: NavHostContr
     Scaffold(
         topBar = {
             TopAppBar(
+                // Need to change the plus sign  with the appropriate label "Create Group". Instead of showing attendance
+                //Also don't forget to tie groups with teachers ID and test it.
+                //Start working on taking and checking attendance
                 title = { Text("Attendance") },
                 navigationIcon = {
                     IconButton(
