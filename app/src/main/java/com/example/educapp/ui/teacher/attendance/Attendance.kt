@@ -93,12 +93,16 @@ fun GroupBox(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var menuAnchor by remember { mutableStateOf<IntOffset?>(null) }
+    var boxPosition by remember { mutableStateOf<IntOffset?>(null) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
             .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+            .onGloballyPositioned { coordinates ->
+                boxPosition = coordinates.positionInRoot().round()
+            }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -118,12 +122,15 @@ fun GroupBox(
             Text(text = group.schedule, style = MaterialTheme.typography.bodyMedium)
         }
 
-        if (menuAnchor != null) {
+        if (menuAnchor != null && boxPosition != null) {
             val density = LocalDensity.current
             DropdownMenu(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false },
-                offset = DpOffset(density.run{ menuAnchor!!.x.toDp() }, density.run{ menuAnchor!!.y.toDp()})
+                offset = DpOffset(
+                    density.run { (menuAnchor!!.x - boxPosition!!.x).toDp() },
+                    density.run { (menuAnchor!!.y - boxPosition!!.y).toDp() }
+                )
             ) {
                 DropdownMenuItem(
                     text = { Text("Edit") },
