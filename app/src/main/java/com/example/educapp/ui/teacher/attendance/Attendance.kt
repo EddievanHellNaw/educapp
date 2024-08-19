@@ -119,19 +119,11 @@ fun GroupBox(
         }
 
         if (menuAnchor != null) {
-            var density by remember { mutableStateOf<Density?>(null) }
+            val density = LocalDensity.current
             DropdownMenu(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false },
-                modifier = Modifier.onGloballyPositioned { coordinates ->
-                    density = LocalDensity.current
-                },
-                offset = density?.let {
-                    DpOffset(
-                        it.run { menuAnchor!!.x.toDp() },
-                        it.run { menuAnchor!!.y.toDp() }
-                    )
-                } ?: DpOffset(0.dp, 0.dp)
+                offset = DpOffset(density.run{ menuAnchor!!.x.toDp() }, density.run{ menuAnchor!!.y.toDp()})
             ) {
                 DropdownMenuItem(
                     text = { Text("Edit") },
