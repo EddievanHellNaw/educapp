@@ -1,5 +1,6 @@
 package com.example.educapp.ui
 
+import android.util.Log
 import androidx.activity.result.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,13 +91,28 @@ fun LoginScreen(navController: NavController) {
 
             // Handle login success/failure and navigation
             LaunchedEffect(key1 = loginSuccess) {
+                Log.d("LoginScreen", "LaunchedEffect triggered with loginSuccess: $loginSuccess")
+
                 if (loginSuccess == true) {
-                    when (viewModel.getUserRole()) {
-                        UserRole.TEACHER -> navController.navigate("teacher_main")
-                        UserRole.STUDENT -> navController.navigate("student_main")
-                        else -> {}
+                    viewModel.getUserRole { role -> // Call getUserRole with the callback
+                        Log.d("LoginScreen", "User role: $role")
+
+                        when (role) { // Use the role received in the callback
+                            UserRole.TEACHER -> {
+                                Log.d("LoginScreen", "Navigating to teacher_main")
+                                navController.navigate("teacher")
+                            }
+                            UserRole.STUDENT -> {
+                                Log.d("LoginScreen", "Navigating to student_main")
+                                navController.navigate("student")
+                            }
+                            else -> {
+                                Log.d("LoginScreen", "No role found, not navigating")
+                            }
+                        }
                     }
                 } else if (loginSuccess == false) {
+                    Log.d("LoginScreen", "Login failed")
                     snackbarHostState.showSnackbar(
                         message = "Login failed. Please try again.",
                         duration = SnackbarDuration.Short

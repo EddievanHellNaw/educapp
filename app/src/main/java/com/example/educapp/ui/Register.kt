@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.test.filter
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -68,12 +67,25 @@ class RegistrationViewModel(private val context: Context) : ViewModel() {
                     userRef.set(hashMapOf("role" to role.name, "username" to name, "email" to email)).await() // Save all data at once
 
                     UserPreferencesRepository.saveRole(context, role)
-                    onResult(true)
+                    val directLink = "https://educapp.page.link/verifyEmail?userId=${user.uid}"
+                    user.sendEmailVerification()
+                        .addOnCompleteListener { verificationTask ->
+                            if (verificationTask.isSuccessful) {
+                                // Email sent
+                                Log.d("RegistrationViewModel", "Verification email sent to ${user.email}")
+                                onResult(true)
+                            } else {
+                                // Handle error
+                                Log.e("RegistrationViewModel", "Failed to send verification email", verificationTask.exception)
+                                onResult(false)
+                            }
+                        }
                 } else {
                     onResult(false)
                 }
             } catch (e: Exception) {
                 onResult(false)
+                Log.e("RegistrationViewModel", "Registration failed: ${e.message}") // Log the error message
             }
         }
     }
@@ -90,42 +102,46 @@ class RegistrationViewModel(private val context: Context) : ViewModel() {
 
                 if (email != null) {
                     auth.signInWithEmailAndPassword(email, password).await()
-                    onResult(true) // Call onResult after successful login
+                    val user = Firebase.auth.currentUser
+                    if (user?.isEmailVerified == true) {
+                        // Email is verified
+                        onResult(true)
+                    } else {
+                        // Email is not verified, show a message or block login
+                        Log.w("RegistrationViewModel", "User tried to log in with unverified email")
+                        onResult(false)
+                    }
                 } else {
                     onResult(false)
                 }
             } catch (e: Exception) {
                 onResult(false)
+                Log.e("RegistrationViewModel", "Login failed: ${e.message}") // Log the error message
             }
         }
     }
 
-    suspend fun getUserRole(): Any? {
-        // 1. Try to get the role from SharedPreferences
-        val savedRole = UserPreferencesRepository.getRole(context)
-        if (savedRole != null) {
-            return savedRole
-        }
-
-        // 2. If not found in SharedPreferences, try to get it from Firestore
+    fun getUserRole(onRoleRetrieved: (UserRole?) -> Unit) {
         val user = auth.currentUser
         if (user != null) {
-            return try {
-                val document = db.collection("users").document(user.uid).get().await()
-                if (document.exists()) {
-                    val roleName = document.getString("role")
-                    UserRole.valueOf(roleName!!) // Convert role name to UserRole enum
-                } else {
-                    null
+            db.collection("users").document(user.uid).get()
+                .addOnSuccessListener { document ->
+                    if (document.exists()) {
+                        val roleName = document.getString("role")
+                        val role = UserRole.valueOf(roleName!!)
+                        onRoleRetrieved(role)
+                    } else {
+                        onRoleRetrieved(null)
+                    }
                 }
-            } catch (e: Exception) {
-                null
-            }
+                .addOnFailureListener { e ->
+                    onRoleRetrieved(null)
+                }
+        } else {
+            onRoleRetrieved(null)
         }
-
-        return null
     }
-}
+    }
 
 class RegistrationViewModelFactory(private val context: Context) :
     ViewModelProvider.Factory {
@@ -231,7 +247,12 @@ fun RegistrationScreen(navController: NavController) {
                     when (viewModel.role) {
                         UserRole.TEACHER -> navController.navigate("teacher_main")
                         UserRole.STUDENT -> navController.navigate("student_main")
-                        else -> {}
+                        else -> {
+                            snackbarHostState.showSnackbar(
+                            message = "Role not found. Please try again.",
+                            duration = SnackbarDuration.Short
+                        )
+                        }
                     }
                 } else if (registrationSuccess == false) {
                     snackbarHostState.showSnackbar(

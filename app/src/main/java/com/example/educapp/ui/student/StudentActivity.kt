@@ -1,4 +1,4 @@
-package com.example.educapp.ui
+package com.example.educapp.ui.student
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,9 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.educapp.R
+import com.example.educapp.ui.CircularButton
 
 @Composable
-fun TeacherMainScreen(navController: NavController) {
+fun StudentMainScreen(navController: NavController) {
     Scaffold(
         bottomBar = {
             Row(
@@ -26,12 +27,11 @@ fun TeacherMainScreen(navController: NavController) {
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CircularButton(imageResId = R.drawable.attendance_icon, onClick = { navController.navigate("attendance") })
+                CircularButton(imageResId = R.drawable.chatbot_icon, onClick = { navController.navigate("chatbot") })
                 CircularButton(imageResId = R.drawable.activity_icon, onClick = { navController.navigate("activity") })
-                CircularButton(imageResId = R.drawable.default_user_icon, onClick = { navController.navigate("profile") })
+                CircularButton(imageResId = R.drawable.default_user_icon, isLarge = true, onClick = { navController.navigate("profile") }) // Larger button
                 CircularButton(imageResId = R.drawable.calendar_icon, onClick = { navController.navigate("calendar") })
-                CircularButton(imageResId = R.drawable.settings_icon, onClick = { navController.navigate("settings") })
-            }
+                CircularButton(imageResId = R.drawable.settings_icon, onClick = { navController.navigate("settings") })            }
         }
     ) { paddingValues ->
         Column(
@@ -41,7 +41,7 @@ fun TeacherMainScreen(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("Teacher Home Screen")
+            Text("Student Home Screen")
         }
     }
 }
