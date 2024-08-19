@@ -29,6 +29,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlin.collections.addAll
 import kotlin.text.clear
 
@@ -36,7 +37,8 @@ data class AttendanceGroup(
     val id: String = "",
     val name: String = "",
     val schedule: String = "",
-    var students: List<String> = emptyList()
+    var students: List<String> = emptyList(),
+    val teacherdId: String = ""
 )
 
 class AttendanceViewModel : ViewModel() {
@@ -86,7 +88,46 @@ class AttendanceViewModel : ViewModel() {
                 }
         }
     }
-}
+
+    fun updateGroup(group: AttendanceGroup) {
+            viewModelScope.launch {
+                val db = Firebase.firestore
+                try {
+                    val groupRef = db.collection("groups").whereEqualTo("name", group.name).get().await().documents[0].reference
+                    groupRef.update(
+                        mapOf(
+                            "name" to group.name,
+                            "schedule" to group.schedule,
+                            "students" to group.students
+                        )
+                    ).await()
+                    // Optionally update the group in _groups list
+                    val index = _groups.indexOfFirst { it.name == group.name }
+                    if (index != -1) {
+                        _groups[index] = group
+                    }
+                } catch (e: Exception) {
+                    Log.w("AttendanceViewModel", "Error updating group", e)
+                    // Handle error, e.g., show a Snackbar
+                }
+            }
+        }
+    fun deleteGroup(group: AttendanceGroup) {
+            viewModelScope.launch {
+                val db = Firebase.firestore
+                try {
+                    val groupRef = db.collection("groups").whereEqualTo("name", group.name).get().await().documents[0].reference
+                    groupRef.delete().await()
+                    // Remove the group from _groups list
+                    _groups.remove(group)
+                } catch (e: Exception) {
+                    Log.w("AttendanceViewModel", "Error deleting group", e)
+                    // Handle error, e.g., show a Snackbar
+                }
+            }
+        }
+    }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
