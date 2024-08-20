@@ -14,8 +14,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import java.time.LocalDate
+import java.time.ZoneOffset
+import androidx.compose.foundation.layout.Arrangement
 
 
 enum class AttendanceStatus {
@@ -39,25 +48,30 @@ enum class AttendanceStatus {
 data class AttendanceRecord(
     val student: String,
     val partial: Int,
-    val status: AttendanceStatus
+    val status: AttendanceStatus,
+    val timestamp: Long = System.currentTimeMillis()
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TakeAttendanceScreen(viewModel: AttendanceViewModel, groupId: String) {
-    val group = viewModel.groups.find { it.id == groupId } // Find group by ID
-    val groupName = group?.name ?: "" // Get group name or empty string if not found
-
+    val group = viewModel.groups.find { it.id == groupId }
+    val groupName = group?.name ?: ""
+    val students = group?.students ?: emptyList()
 
     val attendanceRecords = remember { mutableStateListOf<AttendanceRecord>() }
     var currentPartial by remember { mutableStateOf(1) }
-    val totalPartials = 3 // Example: 3 partials
-    var showStudentList by remember { mutableStateOf(false) }
-    var showSummary by remember { mutableStateOf(false) }
+    val totalPartials = 3
+    var showAttendance by remember { mutableStateOf(false) }
+    var showCheck by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var showConfirmationDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp) // Add padding for better visual spacing
+            .padding(16.dp)
     ) {
         Text(
             text = "Take Attendance for $groupName",
@@ -68,59 +82,135 @@ fun TakeAttendanceScreen(viewModel: AttendanceViewModel, groupId: String) {
         )
 
         // Partial boxes
-        for (i in 1..3) {
+        for (partial in 1..totalPartials) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp)
                     .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
                     .clickable {
-                        currentPartial = i
-                        showStudentList = true
+                        currentPartial = partial
+                        showAttendance = true
                     }
             ) {
-                Text(
-                    text = "Partial $i",
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-        }
-        // Student list (displayed when showStudentList is true)
-        if (showStudentList) {
-            StudentList(group, currentPartial) { student, status ->
-                val record = AttendanceRecord(student, currentPartial, status)
-                attendanceRecords.add(record)
-                if (attendanceRecords.size == group?.students?.size) {
-                    showStudentList = false
-                    if (currentPartial < totalPartials) {
-                        currentPartial++
-                    } else {
-                        showSummary = true
+                if (showAttendance && currentPartial == partial) {
+                    Column {
+                        Button(onClick = { showDatePicker = true }) {
+                            Text("Select Date")
+                        }
+                        if (showDatePicker) {
+                            DatePickerDialog(
+                                onDismissRequest = { showDatePicker = false },
+                                confirmButton = {
+                                    Button(onClick = {
+                                        showDatePicker = false
+                                    }) {
+                                        Text("OK")
+                                    }
+                                },
+                                dismissButton = {
+                                    Button(onClick = { showDatePicker = false }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            ) {
+                                val datePickerState = rememberDatePickerState(
+                                    initialSelectedDateMillis = selectedDate.atStartOfDay()
+                                        .toInstant(ZoneOffset.UTC).toEpochMilli()
+                                )
+                                DatePicker(
+                                    state = datePickerState,
+                                    title = { Text("Select Date") },
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                                LaunchedEffect(datePickerState.selectedDateMillis) {
+                                    if (datePickerState.selectedDateMillis != null) {
+                                        selectedDate = LocalDate.ofEpochDay(
+                                            datePickerState.selectedDateMillis!! / 86400000
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        students.forEach { student ->
+                            StudentItem(student) { status ->
+                                val date =
+                                    selectedDate.atStartOfDay().toInstant(ZoneOffset.UTC)
+                                        .toEpochMilli()
+                                val record =
+                                    AttendanceRecord(student, currentPartial, status, date)
+                                attendanceRecords.add(record)
+                                if (attendanceRecords.size == students.size) {
+                                    showConfirmationDialog = true
+                                }
+                            }
+                        }
+                        if (showConfirmationDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showConfirmationDialog = false },
+                                title = { Text("Confirm Attendance") },
+                                text = { Text("Do you want to save the attendance?") },
+                                confirmButton = {
+                                    Button(onClick = {
+                                        showConfirmationDialog = false
+                                        showAttendance = false
+                                        viewModel.saveAttendance(
+                                            groupId,
+                                            attendanceRecords
+                                        )
+                                        attendanceRecords.clear()
+                                    }) {
+                                        Text("Save")
+                                    }
+                                },
+                                dismissButton = {
+                                    Button(onClick = {
+                                        showConfirmationDialog = false
+                                        attendanceRecords.clear()
+                                    }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            )
+                        }
+                    }
+                } else if (showCheck && currentPartial == partial) {
+                    // Display attendance summary for the partial
+                    AttendanceSummary(attendanceRecords.filter { it.partial == currentPartial })
+                } else {
+                    Text(
+                        text = "Partial $partial",
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+
+                if (showAttendance && currentPartial == partial) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Button(onClick = {
+                            showAttendance = false
+                        }) {
+                            Text("Attendance")
+                        }
+                        Button(onClick = {
+                            showCheck = true
+                            showAttendance = false
+                        }) {
+                            Text("Check")
+                        }
                     }
                 }
             }
         }
-        if (showSummary) {
-            AttendanceSummary(attendanceRecords)
-        }
     }
 }
 
 @Composable
-fun StudentList(group: AttendanceGroup?, currentPartial: Int, onAttendanceRecorded: (String, AttendanceStatus) -> Unit)  {
-    val students = group?.students ?: emptyList()
-
-    LazyColumn {
-        items(students) { student ->
-            StudentItem(student, currentPartial, onAttendanceRecorded)
-        }
-    }
-}
-
-@Composable
-fun StudentItem(student: String, currentPartial: Int, onAttendanceRecorded: (String, AttendanceStatus) -> Unit) {
-    var attendanceStatus by remember { mutableStateOf<AttendanceStatus?>(null) }
-
+fun StudentItem(student: String, onAttendanceRecorded: (AttendanceStatus) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -128,21 +218,33 @@ fun StudentItem(student: String, currentPartial: Int, onAttendanceRecorded: (Str
     ) {
         Text(text = student)
         Spacer(modifier = Modifier.weight(1f))
+        AttendanceOptions(student, onAttendanceRecorded)
+    }
+}
+
+@Composable
+fun AttendanceOptions(
+    student: String,
+    onAttendanceRecorded: (AttendanceStatus) -> Unit
+) {
+    var attendanceStatus by remember { mutableStateOf<AttendanceStatus?>(null) }
+
+    Row {
         AttendanceOption(AttendanceStatus.PRESENT, Color.Green) {
             attendanceStatus = AttendanceStatus.PRESENT
-        }
-        AttendanceOption(AttendanceStatus.ABSENT, Color.Red) {
-            attendanceStatus = AttendanceStatus.ABSENT
         }
         AttendanceOption(AttendanceStatus.LATE, Color.Yellow) {
             attendanceStatus = AttendanceStatus.LATE
         }
+        AttendanceOption(AttendanceStatus.ABSENT, Color.Red) {
+            attendanceStatus = AttendanceStatus.ABSENT
+        }
     }
 
-    // Store attendance status for student and partial (implementation needed)
+    // Store attendance status for student (implementation needed)
     LaunchedEffect(key1 = attendanceStatus) {
         if (attendanceStatus != null) {
-            onAttendanceRecorded(student, attendanceStatus!!)
+            onAttendanceRecorded(attendanceStatus!!)
             attendanceStatus = null // Reset status after recording
         }
     }
@@ -167,9 +269,13 @@ fun AttendanceSummary(attendanceRecords: List<AttendanceRecord>) {
 
     LazyColumn {
         items(attendanceSummary.entries.toList()) { (student, summary) ->
-            Text(text = "Student: $student")
-            summary.forEach { (status, count) ->
-                Text(text = "- $status: $count")
+            val absentCount = summary[AttendanceStatus.ABSENT] ?: 0
+            val textColor = if (absentCount >= 6) Color.Red else Color.Black
+            Column {
+                Text(text = "Student: $student", color = textColor)
+                summary.forEach { (status, count) ->
+                    Text(text = "- $status: $count", color = textColor)
+                }
             }
         }
     }

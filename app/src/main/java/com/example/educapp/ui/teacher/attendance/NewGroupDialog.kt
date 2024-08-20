@@ -165,6 +165,18 @@ class AttendanceViewModel : ViewModel() {
                 }
             }
         }
+    fun saveAttendance(groupId: String, attendanceRecords: List<AttendanceRecord>) {
+        val db = Firebase.firestore
+        val batch = db.batch()
+        attendanceRecords.forEach { record ->
+            val recordRef = db.collection("groups").document(groupId)
+                .collection("attendance").document(record.student).collection("records").document()
+            batch.set(recordRef, record)
+        }
+        batch.commit()
+            .addOnSuccessListener { /* Handle success */ }
+            .addOnFailureListener { /* Handle failure */ }
+    }
 }
 
 

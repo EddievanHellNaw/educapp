@@ -76,8 +76,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-    implementation("androidx.compose.material:material:1.3.1")
     implementation("androidx.compose.material:material-icons-core:1.3.1") // Use the latest version
     implementation("androidx.compose.material:material-icons-extended:1.3.1")
+    implementation("androidx.compose.material:material:1.3.1")
 }// Use the latest version// Use the latest version
 
