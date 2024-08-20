@@ -64,7 +64,7 @@ class RegistrationViewModel(private val context: Context) : ViewModel() {
                     user.updateProfile(profileUpdates).await()
 
                     val userRef = db.collection("users").document(user.uid)
-                    userRef.set(hashMapOf("role" to role.name, "username" to name, "email" to email)).await() // Save all data at once
+                    userRef.set(hashMapOf("role" to role.name, "username" to name, "email" to email, "teacherId" to user.uid)).await() // Save all data at once
 
                     UserPreferencesRepository.saveRole(context, role)
                     val directLink = "https://educapp.page.link/verifyEmail?userId=${user.uid}"

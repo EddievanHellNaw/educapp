@@ -27,6 +27,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.get
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -34,34 +35,57 @@ import kotlin.collections.addAll
 import kotlin.text.clear
 
 data class AttendanceGroup(
-    val id: String = "",
-    val name: String = "",
-    val schedule: String = "",
+    var id: String = "",
+    var name: String = "",
+    var schedule: String = "",
     var students: List<String> = emptyList(),
-    val teacherdId: String = ""
+    val teacherId: String = ""
 )
 
 class AttendanceViewModel : ViewModel() {
 
     init{
-        fetchGroups()
+        viewModelScope.launch {
+            val currentTeacherId = getCurrentTeacherId()
+            fetchGroups(currentTeacherId)
+        }
     }
+
 
     private val _groups = mutableStateListOf<AttendanceGroup>()
     val groups: List<AttendanceGroup> = _groups
 
-    init {
-        fetchGroups()
+    private suspend fun getCurrentTeacherId(): String {
+        val auth = Firebase.auth
+        val db = Firebase.firestore
+        val user = auth.currentUser
+        return if (user != null) {
+            try {
+                val userDoc = db.collection("users").document(user.uid).get().await()
+                userDoc.getString("teacherId") ?: ""
+            } catch (e: Exception) {
+                Log.e("AttendanceViewModel", "Error getting teacherId", e)
+                ""
+            }
+        } else {
+            ""
+        }
     }
 
-    private fun fetchGroups() {
+    suspend fun getTeacherId(): String {
+        return getCurrentTeacherId()
+    }
+
+    private fun fetchGroups(teacherId: String) {
         viewModelScope.launch {
             val db = Firebase.firestore
-            db.collection("groups").get()
+            db.collection("groups")
+                .whereEqualTo("teacherId", teacherId).get()
                 .addOnSuccessListener { querySnapshot ->
                     _groups.clear()
                     for (document in querySnapshot) {
                         val group = document.toObject(AttendanceGroup::class.java)
+                        group.id = document.id
                         _groups.add(group)
                     }
                 }
@@ -71,13 +95,14 @@ class AttendanceViewModel : ViewModel() {
         }
     }
 
-    fun saveGroup(group: AttendanceGroup) {
+    fun saveGroup(group: AttendanceGroup, teacherId: String) {
         viewModelScope.launch {
             val db = Firebase.firestore
             val data = mapOf(
                 "name" to group.name,
                 "schedule" to group.schedule,
-                "students" to group.students
+                "students" to group.students,
+                "teacherId" to teacherId
             )
             db.collection("groups").add(data)
                 .addOnSuccessListener { documentReference ->
@@ -89,49 +114,63 @@ class AttendanceViewModel : ViewModel() {
         }
     }
 
-    fun updateGroup(group: AttendanceGroup) {
-            viewModelScope.launch {
-                val db = Firebase.firestore
-                try {
-                    val groupRef = db.collection("groups").whereEqualTo("name", group.name).get().await().documents[0].reference
-                    groupRef.update(
-                        mapOf(
-                            "name" to group.name,
-                            "schedule" to group.schedule,
-                            "students" to group.students
-                        )
-                    ).await()
-                    // Optionally update the group in _groups list
-                    val index = _groups.indexOfFirst { it.name == group.name }
-                    if (index != -1) {
-                        _groups[index] = group
+    fun updateGroup(group: AttendanceGroup, currentTeacherId: String) {
+        viewModelScope.launch {
+            val db = Firebase.firestore
+            try {
+                if (group.teacherId == currentTeacherId) {
+                    val querySnapshot = db.collection("groups").whereEqualTo("name", group.name).get().await()
+                    if (querySnapshot.documents.isNotEmpty()) { // Check if documents exist
+                        val groupRef = db.collection("groups").document(group.id)
+                        groupRef.update(
+                            mapOf(
+                                "name" to group.name,
+                                "schedule" to group.schedule,
+                                "students" to group.students
+                            )
+                        ).await()
+
+                        // Update the group in _groups list
+                        val index = _groups.indexOfFirst { it.id == group.id }
+                        if (index != -1) {
+                            _groups[index] = group
+                        }
+                    } else {
+                        // Handle empty snapshot (e.g., show a message to the user)
+                        Log.w("AttendanceViewModel", "No group found with name: ${group.name}")
                     }
-                } catch (e: Exception) {
-                    Log.w("AttendanceViewModel", "Error updating group", e)
-                    // Handle error, e.g., show a Snackbar
+                } else {
+                    Log.w("AttendanceViewModel", "Current teacher ID does not match the group's teacher ID")
                 }
+            } catch (e: Exception) {
+                Log.w("AttendanceViewModel", "Error updating group", e)
+                // Handle error, e.g., show a Snackbar
             }
         }
-    fun deleteGroup(group: AttendanceGroup) {
+    }
+    fun deleteGroup(group: AttendanceGroup, currentTeacherId: String) {
             viewModelScope.launch {
                 val db = Firebase.firestore
                 try {
-                    val groupRef = db.collection("groups").whereEqualTo("name", group.name).get().await().documents[0].reference
-                    groupRef.delete().await()
-                    // Remove the group from _groups list
-                    _groups.remove(group)
+                    if(group.teacherId == currentTeacherId) {
+                        val groupRef =
+                            db.collection("groups").document(group.id).delete().await() // Use document ID
+                        _groups.remove(group)
+                    }else {
+                        Log.w("AttendanceViewModel", "Current teacher ID does not match the group's teacher ID")
+                    }
                 } catch (e: Exception) {
                     Log.w("AttendanceViewModel", "Error deleting group", e)
                     // Handle error, e.g., show a Snackbar
                 }
             }
         }
-    }
+}
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewGroupDialog(viewModel: AttendanceViewModel, onDismiss: () -> Unit) {
+fun NewGroupDialog(viewModel: AttendanceViewModel, teacherId: String, onDismiss: () -> Unit) {
     var groupName by remember { mutableStateOf("") }
     var groupSchedule by remember { mutableStateOf("") }
     var studentName by remember { mutableStateOf("") }
@@ -182,7 +221,7 @@ fun NewGroupDialog(viewModel: AttendanceViewModel, onDismiss: () -> Unit) {
             Button(onClick = {
                 val group = AttendanceGroup(name = groupName, schedule = groupSchedule, students = students)
                 Log.d("NewGroupDialog", "Students: $students")
-                viewModel.saveGroup(group)
+                viewModel.saveGroup(group, teacherId)
                 onDismiss()
             }) {
                 Text("Save")

@@ -7,15 +7,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.educapp.ui.auth.WelcomeScreen
 import com.example.educapp.ui.student.StudentMainScreen
 import com.example.educapp.ui.teacher.attendance.AttendanceScreen
 import com.example.educapp.ui.teacher.TeacherMainScreen
 import com.example.educapp.ui.teacher.attendance.AttendanceViewModel
+import com.example.educapp.ui.teacher.attendance.TakeAttendanceScreen
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
@@ -74,6 +78,15 @@ fun MainScreen() {
             composable("teacher/attendance") {
                 val viewModel = AttendanceViewModel()
                 AttendanceScreen(viewModel, navController) }
+            composable(
+                route = "teacher/take_attendance/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getString("groupId")
+                val viewModel: AttendanceViewModel = viewModel()
+                // Pass groupId to TakeAttendanceScreen
+                TakeAttendanceScreen(viewModel, groupId ?: "")
+            }
 
         }
     }
