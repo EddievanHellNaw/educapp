@@ -29,6 +29,8 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlin.collections.addAll
@@ -54,6 +56,8 @@ class AttendanceViewModel : ViewModel() {
 
     private val _groups = mutableStateListOf<AttendanceGroup>()
     val groups: List<AttendanceGroup> = _groups
+    private val _attendanceRecordsFlow = MutableSharedFlow<List<AttendanceRecord>>()
+    val attendanceRecordsFlow: SharedFlow<List<AttendanceRecord>> = _attendanceRecordsFlow.asSharedFlow()
 
     private suspend fun getCurrentTeacherId(): String {
         val auth = Firebase.auth
@@ -165,6 +169,7 @@ class AttendanceViewModel : ViewModel() {
                 }
             }
         }
+
     fun saveAttendance(groupId: String, attendanceRecords: List<AttendanceRecord>) {
         val db = Firebase.firestore
         val batch = db.batch()
@@ -174,8 +179,41 @@ class AttendanceViewModel : ViewModel() {
             batch.set(recordRef, record)
         }
         batch.commit()
-            .addOnSuccessListener { /* Handle success */ }
-            .addOnFailureListener { /* Handle failure */ }
+            .addOnSuccessListener { Log.d("AttendanceViewModel", "Attendance records saved successfully!") }
+            .addOnFailureListener { e ->
+                // Handle failure, e.g., show an error message
+                Log.w("AttendanceViewModel", "Error saving attendance records", e)
+            }
+    }
+
+    fun getAttendanceRecordsForGroup(groupId: String, onRecordsLoaded: (List<AttendanceRecord>) -> Unit) {
+        val db = Firebase.firestore
+        db.collection("groups").document(groupId).collection("attendance")
+            .get()
+            .addOnSuccessListener { attendanceDocuments ->
+                val attendanceRecords = mutableListOf<AttendanceRecord>()
+                for (attendanceDocument in attendanceDocuments) {
+                    val student = attendanceDocument.id // Get student from document ID
+                    db.collection("groups").document(groupId)
+                        .collection("attendance").document(student).collection("records")
+                        .get()
+                        .addOnSuccessListener { recordDocuments ->
+                            for (recordDocument in recordDocuments) {
+                                val attendanceRecord = recordDocument.toObject(AttendanceRecord::class.java)
+                                attendanceRecords.add(attendanceRecord)
+                            }
+                            onRecordsLoaded(attendanceRecords)
+                        }
+                        .addOnFailureListener { exception ->
+                            println("Error getting records: ${exception.message}")
+                            onRecordsLoaded(emptyList())
+                        }
+                }
+            }
+            .addOnFailureListener { exception ->
+                println("Error getting attendance: ${exception.message}")
+                onRecordsLoaded(emptyList())
+            }
     }
 }
 

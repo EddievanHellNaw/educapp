@@ -19,6 +19,8 @@ import com.example.educapp.ui.student.StudentMainScreen
 import com.example.educapp.ui.teacher.attendance.AttendanceScreen
 import com.example.educapp.ui.teacher.TeacherMainScreen
 import com.example.educapp.ui.teacher.attendance.AttendanceViewModel
+import com.example.educapp.ui.teacher.attendance.CheckScreen
+import com.example.educapp.ui.teacher.attendance.TakeAttendanceDetailsScreen
 import com.example.educapp.ui.teacher.attendance.TakeAttendanceScreen
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
@@ -77,17 +79,40 @@ fun MainScreen() {
             composable("teacher/main") { TeacherMainScreen(navController) }
             composable("teacher/attendance") {
                 val viewModel = AttendanceViewModel()
-                AttendanceScreen(viewModel, navController) }
+                AttendanceScreen(viewModel, navController)
+            }
             composable(
                 route = "teacher/take_attendance/{groupId}",
                 arguments = listOf(navArgument("groupId") { type = NavType.StringType })
             ) { backStackEntry ->
-                val groupId = backStackEntry.arguments?.getString("groupId")
+                val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
                 val viewModel: AttendanceViewModel = viewModel()
-                // Pass groupId to TakeAttendanceScreen
-                TakeAttendanceScreen(viewModel, groupId ?: "")
+                TakeAttendanceScreen(viewModel, groupId, navController)
             }
-
+            composable(
+                route = "attendance/{groupId}/{partial}",
+                arguments = listOf(
+                    navArgument("groupId") { type = NavType.StringType },
+                    navArgument("partial") { type = NavType.IntType }
+                )
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+                val partial = backStackEntry.arguments?.getInt("partial") ?: 1
+                val viewModel: AttendanceViewModel = viewModel()
+                TakeAttendanceDetailsScreen(viewModel, groupId, partial, navController)
+            }
+            composable(
+                route = "check/{groupId}/{partial}",
+                arguments = listOf(
+                    navArgument("groupId") { type = NavType.StringType },
+                    navArgument("partial") { type = NavType.IntType }
+                )
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+                val partial = backStackEntry.arguments?.getInt("partial") ?: 1
+                val viewModel: AttendanceViewModel = viewModel()
+                CheckScreen(viewModel, groupId, partial)
+            }
         }
     }
 }

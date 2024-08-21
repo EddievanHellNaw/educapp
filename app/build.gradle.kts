@@ -79,5 +79,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core:1.3.1") // Use the latest version
     implementation("androidx.compose.material:material-icons-extended:1.3.1")
     implementation("androidx.compose.material:material:1.3.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
 }// Use the latest version// Use the latest version
 
