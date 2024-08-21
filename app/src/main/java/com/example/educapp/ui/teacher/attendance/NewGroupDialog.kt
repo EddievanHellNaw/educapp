@@ -1,7 +1,6 @@
 package com.example.educapp.ui.teacher.attendance
 
 import android.util.Log
-import androidx.activity.result.launch
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,17 +23,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.get
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import kotlin.collections.addAll
-import kotlin.text.clear
+
 
 data class AttendanceGroup(
     var id: String = "",
@@ -174,46 +174,35 @@ class AttendanceViewModel : ViewModel() {
         val db = Firebase.firestore
         val batch = db.batch()
         attendanceRecords.forEach { record ->
-            val recordRef = db.collection("groups").document(groupId)
-                .collection("attendance").document(record.student).collection("records").document()
+            val recordRef = db.collection("attendance").document() // Create a new document
             batch.set(recordRef, record)
         }
         batch.commit()
             .addOnSuccessListener { Log.d("AttendanceViewModel", "Attendance records saved successfully!") }
             .addOnFailureListener { e ->
-                // Handle failure, e.g., show an error message
                 Log.w("AttendanceViewModel", "Error saving attendance records", e)
             }
     }
 
-    fun getAttendanceRecordsForGroup(groupId: String, onRecordsLoaded: (List<AttendanceRecord>) -> Unit) {
+    fun getAttendanceRecordsForGroup(groupId: String): Flow<List<AttendanceRecord>> = flow {
         val db = Firebase.firestore
-        db.collection("groups").document(groupId).collection("attendance")
-            .get()
-            .addOnSuccessListener { attendanceDocuments ->
-                val attendanceRecords = mutableListOf<AttendanceRecord>()
-                for (attendanceDocument in attendanceDocuments) {
-                    val student = attendanceDocument.id // Get student from document ID
-                    db.collection("groups").document(groupId)
-                        .collection("attendance").document(student).collection("records")
-                        .get()
-                        .addOnSuccessListener { recordDocuments ->
-                            for (recordDocument in recordDocuments) {
-                                val attendanceRecord = recordDocument.toObject(AttendanceRecord::class.java)
-                                attendanceRecords.add(attendanceRecord)
-                            }
-                            onRecordsLoaded(attendanceRecords)
-                        }
-                        .addOnFailureListener { exception ->
-                            println("Error getting records: ${exception.message}")
-                            onRecordsLoaded(emptyList())
-                        }
+        try {
+            val attendanceRecords = db.collection("attendance")
+                .whereEqualTo("groupId", groupId)
+                .get().await().documents.map { document ->
+                    AttendanceRecord(
+                        student = document.getString("student") ?: "",
+                        groupId = document.getString("groupId") ?: "",
+                        partial = document.getLong("partial")?.toInt() ?: 0,
+                        status = enumValueOf<AttendanceStatus>(document.getString("status") ?: "PRESENT"),
+                        timestamp = document.getTimestamp("timestamp")!! // Get Timestamp object
+                    )
                 }
-            }
-            .addOnFailureListener { exception ->
-                println("Error getting attendance: ${exception.message}")
-                onRecordsLoaded(emptyList())
-            }
+            emit(attendanceRecords)
+        } catch (e: Exception) {
+            Log.w("AttendanceViewModel", "Error getting attendance records", e)
+            emit(emptyList())
+        }
     }
 }
 

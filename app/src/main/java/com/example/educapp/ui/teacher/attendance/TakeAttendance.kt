@@ -1,7 +1,8 @@
 package com.example.educapp.ui.teacher.attendance
 
+import android.util.Log
 import android.widget.Toast
-import androidx.activity.result.launch
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,10 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -35,18 +40,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
+import com.example.educapp.R
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.delay
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.collections.find
+import java.util.Calendar
 
 @Composable
 fun TakeAttendanceScreen(viewModel: AttendanceViewModel, groupId: String, navController: NavHostController) {
@@ -126,7 +137,7 @@ fun TakeAttendanceDetailsScreen(
     val attendanceRecords = remember { mutableStateListOf<AttendanceRecord>() }
     var showConfirmationDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val group = viewModel.groups.find { it.id == groupId } // Get group from ViewModel
+    val group = viewModel.groups.find { it.id == groupId }
     val students = group?.students ?: emptyList()
 
     Column(modifier = Modifier.padding(16.dp)) {
@@ -134,10 +145,25 @@ fun TakeAttendanceDetailsScreen(
             Text("Select Date: $selectedDate")
         }
         if (showDatePicker) {
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = selectedDate.atStartOfDay(
+                    ZoneId.systemDefault()
+                ).toInstant().toEpochMilli()
+            )
+
             DatePickerDialog(
                 onDismissRequest = { showDatePicker = false },
                 confirmButton = {
-                    Button(onClick = { showDatePicker = false }) {
+                    Button(onClick = {
+                        showDatePicker = false
+                        val calendar = Calendar.getInstance()
+                        calendar.timeInMillis = datePickerState.selectedDateMillis!!
+                        selectedDate = LocalDate.of(
+                            calendar.get(Calendar.YEAR),
+                            calendar.get(Calendar.MONTH) + 1,
+                            calendar.get(Calendar.DAY_OF_MONTH)
+                        )
+                    }) {
                         Text("OK")
                     }
                 },
@@ -147,36 +173,51 @@ fun TakeAttendanceDetailsScreen(
                     }
                 }
             ) {
-                DatePicker(state = rememberDatePickerState(initialSelectedDateMillis = selectedDate.atStartOfDay(
-                    ZoneId.systemDefault()).toInstant().toEpochMilli()))
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        students.forEach { student ->
-            StudentItem(student) { status ->
-                val existingRecord = attendanceRecords.find { it.student == student }
-                if (existingRecord != null) {
-                    attendanceRecords.remove(existingRecord)
-                }
-                val record = AttendanceRecord(
-                    student = student,
-                    groupId = groupId,
-                    partial = partial,
-                    status = status,
-                    timestamp = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
-                        .toEpochMilli()
+                DatePicker(
+                    state = datePickerState,
+                    colors = DatePickerDefaults.colors()
                 )
-                attendanceRecords.add(record)
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Button outside the LazyColumn
         if (attendanceRecords.size == students.size) {
-            Button(onClick = { showConfirmationDialog = true }) {
-                Text("Confirm Attendance")
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            ) {
+                Button(
+                    onClick = { showConfirmationDialog = true },
+                    modifier = Modifier.align(Alignment.TopEnd)
+                ) {
+                    Text("Confirm Attendance")
+                }
+            }
+        }
+
+        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            items(students.size) { index ->
+                val student = students[index]
+                StudentItem(student) { status ->
+                    val existingRecord = attendanceRecords.find { it.student == student }
+                    if (existingRecord != null) {
+                        attendanceRecords.remove(existingRecord)
+                    }
+                    val record = AttendanceRecord(
+                        student = student,
+                        groupId = groupId,
+                        partial = partial,
+                        status = status,
+                        timestamp = com.google.firebase.Timestamp(
+                            selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
+                                .toEpochMilli() / 1000, 0
+                        )
+                    )
+                    attendanceRecords.add(record)
+                }
             }
         }
 
@@ -188,12 +229,14 @@ fun TakeAttendanceDetailsScreen(
                 text = { Text("Do you want to save the attendance?") },
                 confirmButton = {
                     Button(onClick = {
-                        showConfirmationDialog = false // Use rememberCoroutineScope
-                        coroutineScope.launch{
+                        showConfirmationDialog = false
+                        coroutineScope.launch {
                             viewModel.saveAttendance(groupId, attendanceRecords)
                             delay(Duration.ofMillis(1000))
                             Toast.makeText(context, "Attendance saved!", Toast.LENGTH_SHORT).show()
-                            navController.popBackStack() // Navigate back to the previous screen
+                            navController.navigate("attendance/$groupId") { // Navigate to partial boxes screen
+                                popUpTo("attendance/$groupId") { inclusive = true } // Pop current screen
+                            }
                         }
                     }) {
                         Text("Save")
@@ -211,36 +254,99 @@ fun TakeAttendanceDetailsScreen(
 
 @Composable
 fun StudentItem(student: String, onAttendanceRecorded: (AttendanceStatus) -> Unit) {
-    var attendanceStatus by remember { mutableStateOf<AttendanceStatus?>(null) }
+    var selectedStatus by remember { mutableStateOf<AttendanceStatus?>(null) }
 
-    Row(modifier = Modifier.fillMaxWidth()) {
-        Text(text = student)
-        Spacer(modifier = Modifier.weight(1f))
-        AttendanceOption(AttendanceStatus.PRESENT, Color.Green) {
-            attendanceStatus = AttendanceStatus.PRESENT
-        }
-        AttendanceOption(AttendanceStatus.LATE, Color.Yellow) {
-            attendanceStatus = AttendanceStatus.LATE
-        }
-        AttendanceOption(AttendanceStatus.ABSENT, Color.Red) {
-            attendanceStatus = AttendanceStatus.ABSENT
-        }
-    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .border(1.dp, Color.LightGray, RoundedCornerShape(4.dp))
+            .background(
+                color = when (selectedStatus) {
+                    AttendanceStatus.PRESENT -> Color.Green
+                    AttendanceStatus.LATE -> Color.Yellow
+                    AttendanceStatus.ABSENT -> Color.Red
+                    else -> Color.Transparent
+                }
+            )
+    ) {
+        Text(text = student, modifier = Modifier.padding(8.dp))
 
-    LaunchedEffect(key1 = attendanceStatus) {
-        if (attendanceStatus != null) {
-            onAttendanceRecorded(attendanceStatus!!)
-            attendanceStatus = null
+        if (selectedStatus == null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                AttendanceOption(
+                    AttendanceStatus.PRESENT,
+                    Color.Green,
+                    painterResource(id = R.drawable.present_icon),
+                    "Present",
+                    {
+                        selectedStatus = AttendanceStatus.PRESENT
+                        onAttendanceRecorded(AttendanceStatus.PRESENT)
+                    }
+                )
+                AttendanceOption(
+                    AttendanceStatus.LATE,
+                    Color.Yellow,
+                    painterResource(id = R.drawable.late_icon),
+                    "Late",
+                    {
+                        selectedStatus = AttendanceStatus.LATE
+                        onAttendanceRecorded(AttendanceStatus.LATE)
+                    }
+                )
+                AttendanceOption(
+                    AttendanceStatus.ABSENT,
+                    Color.Red,
+                    painterResource(id = R.drawable.absent_icon),
+                    "Absent",
+                    {
+                        selectedStatus = AttendanceStatus.ABSENT
+                        onAttendanceRecorded(AttendanceStatus.ABSENT)
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-fun AttendanceOption(status: AttendanceStatus, color: Color, onClick: () -> Unit) {
-    Box(
+fun AttendanceOption(
+    status: AttendanceStatus,
+    color: Color,
+    image: Painter,
+    text: String,
+    onClick: () -> Unit
+) {
+    var isClicked by remember { mutableStateOf(false) }
+
+    Button(
+        onClick = {
+            isClicked = !isClicked
+            onClick()
+        },
         modifier = Modifier
-            .size(24.dp)
-            .background(color)
-            .clickable { onClick() }
-    )
+            .padding(4.dp)
+            .size(width = 90.dp, height = 70.dp), // Increased height for image and text
+        colors = ButtonDefaults.buttonColors(containerColor = if (isClicked) darkenColor(color) else color)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = image,
+                contentDescription = null,
+                modifier = Modifier.size(30.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text, color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+
+fun darkenColor(color: Color): Color {
+    return color.copy(alpha = 0.8f)
 }
