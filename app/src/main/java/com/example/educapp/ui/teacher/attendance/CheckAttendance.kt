@@ -29,6 +29,7 @@ import androidx.lifecycle.get
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import java.time.LocalDate
+import java.time.ZoneId
 
 enum class AttendanceStatus {
     PRESENT,
@@ -91,17 +92,7 @@ fun AttendanceSummary(attendanceRecords: List<AttendanceRecord>) {
                     // Show details if student is selected
                     if (selectedStudent == student) {
                         val studentRecords = attendanceRecords.filter { it.student == student }
-                        studentRecords.forEach { record ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(text = record.date.toString())
-                                Text(text = record.status.toString())
-                            }
-                        }
+                        DetailedAttendanceView(studentRecords)
                     }
                 }
             }
@@ -111,15 +102,18 @@ fun AttendanceSummary(attendanceRecords: List<AttendanceRecord>) {
 
 @Composable
 fun DetailedAttendanceView(records: List<AttendanceRecord>) {
-    LazyColumn {
-        items(records) { record ->
+    Column(modifier = Modifier.fillMaxWidth()) { // Use a Column instead of LazyColumn
+        records.forEach { record ->
+            val date = record.timestamp.toDate().toInstant()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(text = record.date.toString())
+                Text(text = date.toString())
                 Text(text = record.status.toString())
             }
         }

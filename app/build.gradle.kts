@@ -63,22 +63,23 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation("com.google.firebase:firebase-analytics")
-    implementation("androidx.navigation:navigation-compose:2.7.2")
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     implementation("androidx.room:room-runtime:2.5.2")
     annotationProcessor("androidx.room:room-compiler:2.5.2")
     implementation("androidx.room:room-ktx:2.5.2")
-    implementation(platform("androidx.compose:compose-bom:2023.03.00")) // Only once
+    implementation(platform("androidx.compose:compose-bom:2024.08.00")) // Only once
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-    implementation("androidx.compose.material:material-icons-core:1.3.1") // Use the latest version
-    implementation("androidx.compose.material:material-icons-extended:1.3.1")
-    implementation("androidx.compose.material:material:1.3.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    implementation("androidx.compose.material:material-icons-core:1.6.8") // Use the latest version
+    implementation("androidx.compose.material:material-icons-extended:1.6.8")
+    implementation("androidx.compose.material:material:1.6.8")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("com.github.jeziellago:compose-markdown:0.3.0")
 }// Use the latest version// Use the latest version
 

@@ -28,7 +28,7 @@ fun TeacherMainScreen(navController: NavController) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CircularButton(imageResId = R.drawable.attendance_icon, onClick = { navController.navigate("teacher/attendance") })
-                CircularButton(imageResId = R.drawable.activity_icon, onClick = { navController.navigate("teacher/activity") })
+                CircularButton(imageResId = R.drawable.activity_icon, onClick = { navController.navigate("teacher/activities") })
                 CircularButton(imageResId = R.drawable.default_user_icon, onClick = { navController.navigate("teacher/profile") })
                 CircularButton(imageResId = R.drawable.calendar_icon, onClick = { navController.navigate("teacher/calendar") })
                 CircularButton(imageResId = R.drawable.settings_icon, onClick = { navController.navigate("teacher/settings") })

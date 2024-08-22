@@ -18,6 +18,8 @@ import com.example.educapp.ui.auth.WelcomeScreen
 import com.example.educapp.ui.student.StudentMainScreen
 import com.example.educapp.ui.teacher.attendance.AttendanceScreen
 import com.example.educapp.ui.teacher.TeacherMainScreen
+import com.example.educapp.ui.teacher.activities.ActivitiesScreen
+import com.example.educapp.ui.teacher.activities.NewActivityScreen
 import com.example.educapp.ui.teacher.attendance.AttendanceViewModel
 import com.example.educapp.ui.teacher.attendance.CheckScreen
 import com.example.educapp.ui.teacher.attendance.TakeAttendanceDetailsScreen
@@ -113,6 +115,8 @@ fun MainScreen() {
                 val viewModel: AttendanceViewModel = viewModel()
                 CheckScreen(viewModel, groupId, partial)
             }
-        }
+
+            composable("teacher/activities") { ActivitiesScreen(navController) }
+            composable ("teacher/newActivity") { NewActivityScreen(navController) }       }
     }
 }
