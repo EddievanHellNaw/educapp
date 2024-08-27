@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -18,12 +19,13 @@ import com.example.educapp.ui.auth.WelcomeScreen
 import com.example.educapp.ui.student.StudentMainScreen
 import com.example.educapp.ui.teacher.attendance.AttendanceScreen
 import com.example.educapp.ui.teacher.TeacherMainScreen
-import com.example.educapp.ui.teacher.activities.ActivitiesScreen
-import com.example.educapp.ui.teacher.activities.NewActivityScreen
 import com.example.educapp.ui.teacher.attendance.AttendanceViewModel
 import com.example.educapp.ui.teacher.attendance.CheckScreen
 import com.example.educapp.ui.teacher.attendance.TakeAttendanceDetailsScreen
 import com.example.educapp.ui.teacher.attendance.TakeAttendanceScreen
+import com.example.educapp.ui.teacher.planner.MainPlannerScreen
+import com.example.educapp.ui.teacher.planner.NewPlanScreen
+import com.example.educapp.ui.teacher.planner.PlannerViewModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 
@@ -116,7 +118,9 @@ fun MainScreen() {
                 CheckScreen(viewModel, groupId, partial)
             }
 
-            composable("teacher/activities") { ActivitiesScreen(navController) }
-            composable ("teacher/newActivity") { NewActivityScreen(navController) }       }
+            composable("teacher/planner") { val viewModel = hiltViewModel<PlannerViewModel>()
+                MainPlannerScreen(navController, viewModel) }
+            composable ("teacher/newPlan") { val viewModel = hiltViewModel<PlannerViewModel>()
+                NewPlanScreen(navController, viewModel)}       }
     }
 }

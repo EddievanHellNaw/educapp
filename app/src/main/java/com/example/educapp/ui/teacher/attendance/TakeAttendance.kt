@@ -177,7 +177,6 @@ fun TakeAttendanceDetailsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Button outside the LazyColumn
         if (attendanceRecords.size == students.size) {
             Box(
                 modifier = Modifier
@@ -207,7 +206,7 @@ fun TakeAttendanceDetailsScreen(
                         partial = partial,
                         status = status,
                         timestamp = com.google.firebase.Timestamp(
-                            selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant()
+                            selectedDate.atStartOfDay(ZoneId.of("UTC")).toInstant()
                                 .toEpochMilli() / 1000, 0
                         )
                     )

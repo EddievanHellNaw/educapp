@@ -26,14 +26,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.time.ZoneId
 
 
 data class AttendanceGroup(
@@ -58,6 +63,8 @@ class AttendanceViewModel : ViewModel() {
     val groups: List<AttendanceGroup> = _groups
     private val _attendanceRecordsFlow = MutableSharedFlow<List<AttendanceRecord>>()
     val attendanceRecordsFlow: SharedFlow<List<AttendanceRecord>> = _attendanceRecordsFlow.asSharedFlow()
+    private val _attendanceRecords = MutableStateFlow<List<AttendanceRecord>>(emptyList())
+    val attendanceRecords: StateFlow<List<AttendanceRecord>> = _attendanceRecords.asStateFlow()
 
     private suspend fun getCurrentTeacherId(): String {
         val auth = Firebase.auth
@@ -171,17 +178,26 @@ class AttendanceViewModel : ViewModel() {
         }
 
     fun saveAttendance(groupId: String, attendanceRecords: List<AttendanceRecord>) {
-        val db = Firebase.firestore
-        val batch = db.batch()
-        attendanceRecords.forEach { record ->
-            val recordRef = db.collection("attendance").document() // Create a new document
-            batch.set(recordRef, record)
-        }
-        batch.commit()
-            .addOnSuccessListener { Log.d("AttendanceViewModel", "Attendance records saved successfully!") }
-            .addOnFailureListener { e ->
-                Log.w("AttendanceViewModel", "Error saving attendance records", e)
+        viewModelScope.launch {
+            val db = Firebase.firestore
+            attendanceRecords.forEach { record ->
+                val query = db.collection("attendance")
+                    .whereEqualTo("student", record.student)
+                    .whereEqualTo("groupId", record.groupId)
+                    .whereEqualTo("partial", record.partial)
+                    .whereEqualTo("date", record.date)
+                val existingRecord = query.get().await().documents.firstOrNull()
+                if (existingRecord != null) {
+                    // Update existing record
+                    db.collection("attendance").document(existingRecord.id)
+                        .set(record)
+                        .await()
+                } else {
+                    // Create new record
+                    db.collection("attendance").add(record).await()
+                }
             }
+        }
     }
 
     fun getAttendanceRecordsForGroup(groupId: String): Flow<List<AttendanceRecord>> = flow {
@@ -189,22 +205,62 @@ class AttendanceViewModel : ViewModel() {
         try {
             val attendanceRecords = db.collection("attendance")
                 .whereEqualTo("groupId", groupId)
-                .get().await().documents.map { document ->
-                    AttendanceRecord(
-                        student = document.getString("student") ?: "",
-                        groupId = document.getString("groupId") ?: "",
-                        partial = document.getLong("partial")?.toInt() ?: 0,
-                        status = enumValueOf<AttendanceStatus>(document.getString("status") ?: "PRESENT"),
-                        timestamp = document.getTimestamp("timestamp")!! // Get Timestamp object
-                    )
-                }
-            emit(attendanceRecords)
+                .get().await().documents.map { it.toAttendanceRecord() }
+            val filteredRecords = attendanceRecords
+                .groupBy { Triple(it.student, it.partial, it.date) }
+                .map { it.value.maxByOrNull { it.timestamp }!! }
+            _attendanceRecords.value = filteredRecords
+            emit(filteredRecords)
         } catch (e: Exception) {
             Log.w("AttendanceViewModel", "Error getting attendance records", e)
             emit(emptyList())
         }
     }
+
+    fun updateAttendanceRecord(updatedRecord: AttendanceRecord) {
+        viewModelScope.launch {
+            try {
+                val db = Firebase.firestore
+                val querySnapshot = db.collection("attendance")
+                    .whereEqualTo("student", updatedRecord.student)
+                    .whereEqualTo("groupId", updatedRecord.groupId)
+                    .whereEqualTo("partial", updatedRecord.partial)
+                    .whereEqualTo("date", updatedRecord.date)
+                    .get()
+                    .await()
+
+                if (querySnapshot.documents.isNotEmpty()) {
+                    val recordRef = db.collection("attendance").document(querySnapshot.documents.first().id)
+                    recordRef.update("status", updatedRecord.status).await()
+
+                    // Update _attendanceRecords StateFlow
+                    _attendanceRecords.value = _attendanceRecords.value.map {
+                        if (it.student == updatedRecord.student && it.date == updatedRecord.date) updatedRecord else it
+                    }
+                } else {
+                    Log.w("AttendanceViewModel", "No attendance record found for update")
+                }
+            } catch (e: Exception) {
+                Log.w("AttendanceViewModel", "Error updating attendance record", e)
+            }
+        }
+    }
+
+    // Helper function to convert a Firestore document to AttendanceRecord
+    private fun DocumentSnapshot.toAttendanceRecord(): AttendanceRecord {
+        return AttendanceRecord(
+            student = getString("student") ?: "",
+            groupId = getString("groupId") ?: "",
+            partial = getLong("partial")?.toInt() ?: 0,
+            status = enumValueOf<AttendanceStatus>(getString("status") ?: "PRESENT"),
+            timestamp = getTimestamp("timestamp")!!,
+            date = getTimestamp("timestamp")!!.toDate().toInstant()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+        )
+    }
 }
+
 
 
 @OptIn(ExperimentalMaterial3Api::class)
