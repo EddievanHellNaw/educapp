@@ -52,6 +52,7 @@ android {
 dependencies {
     implementation ("androidx.hilt:hilt-navigation-compose:1.0.0")
     implementation("com.google.dagger:hilt-android:2.44")
+    implementation(libs.places)
     kapt("com.google.dagger:hilt-android-compiler:2.44")
     implementation("androidx.hilt:hilt-navigation-compose:1.0.0")
     implementation(libs.androidx.core.ktx)
@@ -87,5 +88,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     coreLibraryDesugaring ("com.android.tools:desugar_jdk_libs:2.0.3")
+    implementation ("com.jakewharton.timber:timber:5.0.1")
 }
 

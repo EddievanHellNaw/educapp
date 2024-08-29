@@ -28,8 +28,9 @@ import com.example.educapp.ui.teacher.planner.NewPlanScreen
 import com.example.educapp.ui.teacher.planner.PlannerViewModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import dagger.hilt.android.AndroidEntryPoint
 
-
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,10 +68,6 @@ class MainActivity : ComponentActivity() {
 }
 
 
-
-
-
-
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
@@ -82,7 +79,7 @@ fun MainScreen() {
         navigation(startDestination = "teacher/main", route = "teacher") {
             composable("teacher/main") { TeacherMainScreen(navController) }
             composable("teacher/attendance") {
-                val viewModel = AttendanceViewModel()
+                val viewModel = hiltViewModel<AttendanceViewModel>()
                 AttendanceScreen(viewModel, navController)
             }
             composable(

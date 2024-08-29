@@ -1,7 +1,5 @@
 package com.example.educapp.ui.teacher.attendance
 
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,23 +21,6 @@ import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-enum class AttendanceStatus {
-    PRESENT,
-    ABSENT,
-    LATE
-}
-
-data class AttendanceRecord(
-    val student: String = "",
-    val groupId: String = "",
-    val partial: Int = 0,
-    val status: AttendanceStatus = AttendanceStatus.PRESENT,
-    val timestamp: com.google.firebase.Timestamp = com.google.firebase.Timestamp.now(),
-    val date: LocalDate = LocalDate.now()
-)
-
 
 
 
@@ -51,45 +32,53 @@ fun CheckScreen(
     currentPartial: Int
 ) {
     var attendanceRecords by remember { mutableStateOf<List<AttendanceRecord>>(emptyList()) }
-    var isEditing by remember { mutableStateOf(false) }
-    var selectedRecord by remember { mutableStateOf<AttendanceRecord?>(null) }
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    var expandedStudent by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(key1 = groupId) {
-        viewModel.getAttendanceRecordsForGroup(groupId).collect { records ->
+        viewModel.getAttendanceRecordsForGroup(groupId, currentPartial).collect { records ->
             attendanceRecords = records
         }
     }
-    Column{
-        Text(text = "Total Attendance for Partial $currentPartial",
+
+    Column {
+        Text(
+            text = "Total Attendance for Partial $currentPartial",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp))
-
-    if (isEditing && selectedRecord != null) {
-        EditAttendanceView(
-            record = selectedRecord!!,
-            onDismiss = { isEditing = false },
-            onSave = { selectedDate, updatedStatus ->
-                val updatedRecord = selectedRecord!!.copy(
-                    status = updatedStatus,
-                    date = selectedDate
-                )
-                viewModel.updateAttendanceRecord(updatedRecord)
-                isEditing = false
-            }
+                .padding(16.dp)
         )
-    } else {
 
-            AttendanceSummary(
-                attendanceRecords.filter { it.partial == currentPartial},
-                onEditClick = { record ->
-                    selectedRecord = record
-                    isEditing = true
+        LazyColumn {
+            items(attendanceRecords) { record ->
+                StudentItem(
+                    student = record.student,
+                    onClick = {
+                        expandedStudent = if (expandedStudent == record.student) null else record.student
+                    }
+                )
+                if (expandedStudent == record.student) {
+                    DetailedAttendanceView(
+                        records = attendanceRecords.filter {
+                            it.student == record.student && it.partial == currentPartial
+                        }
+                    )
                 }
-            )
+            }
         }
+    }
+}
+
+@Composable
+fun StudentItem(student: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .border(1.dp, Color.LightGray, RoundedCornerShape(4.dp))
+            .clickable { onClick() }
+    ) {
+        Text(text = student, modifier = Modifier.padding(8.dp))
     }
 }
 
@@ -100,19 +89,17 @@ fun DatePickerView(selectedDate: LocalDate, onDateChange: (LocalDate) -> Unit) {
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+            initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 Button(onClick = {
+                    onDateChange(LocalDate.ofInstant(
+                        Instant.ofEpochMilli(datePickerState.selectedDateMillis!!),
+                        ZoneId.systemDefault()
+                    ))
                     showDatePicker = false
-                    onDateChange(
-                        LocalDate.ofInstant(
-                            Instant.ofEpochMilli(datePickerState.selectedDateMillis!!),
-                            ZoneId.of("UTC")
-                        )
-                    )
                 }) {
                     Text("OK")
                 }
@@ -136,11 +123,9 @@ fun DatePickerView(selectedDate: LocalDate, onDateChange: (LocalDate) -> Unit) {
 fun EditAttendanceView(
     record: AttendanceRecord,
     onDismiss: () -> Unit,
-    onSave: (LocalDate, AttendanceStatus) -> Unit
+    onSave: (AttendanceRecord) -> Unit
 ) {
-    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-    var selectedStatus by remember { mutableStateOf(record.status) }
-    val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+    var editedRecord by remember { mutableStateOf(record) }
 
     Column(
         modifier = Modifier
@@ -157,16 +142,10 @@ fun EditAttendanceView(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Date picker
-        DatePickerView(selectedDate) { newDate ->
-            selectedDate = newDate
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Student item section (You'll need to implement this)
-        StudentItem(record.student) { status ->
-            selectedStatus = status
+        StudentItem(record.student, editedRecord.status) { status ->
+            if (status != null) {
+                editedRecord = editedRecord.copy(status = status)
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -178,14 +157,12 @@ fun EditAttendanceView(
             Button(onClick = onDismiss) {
                 Text("Cancel")
             }
-            Button(onClick = { onSave(selectedDate, selectedStatus) }) {
+            Button(onClick = { onSave(editedRecord) }) {
                 Text("Save")
             }
         }
     }
 }
-
-
 
 @Composable
 fun AttendanceSummary(
@@ -262,19 +239,23 @@ fun AttendanceSummary(
 
 @Composable
 fun DetailedAttendanceView(records: List<AttendanceRecord>) {
+    val filteredRecords = records
+        .groupBy { it.date }
+        .flatMap { entry ->
+            entry.value.sortedByDescending { it.timestamp.toDate() }.take(1)
+        }
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        records.forEach { record ->
-            val date = record.timestamp.toDate().toInstant()
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate()
+        filteredRecords.forEach { record ->
+            val textColor = if (record.status == AttendanceStatus.ABSENT) Color.Red else Color.Black
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(text = date.toString())
-                Text(text = record.status.toString())
+                Text(text = record.date.toString(), color = textColor)
+                Text(text = record.status.toString(), color = textColor)
             }
         }
     }
