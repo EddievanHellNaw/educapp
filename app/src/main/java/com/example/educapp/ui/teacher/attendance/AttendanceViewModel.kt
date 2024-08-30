@@ -63,6 +63,9 @@ class AttendanceViewModel @Inject constructor(private val firestore: FirebaseFir
     private val saveAttendanceJob = Job()
     private val saveAttendanceScope = CoroutineScope(Dispatchers.IO + saveAttendanceJob)
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     init{
         viewModelScope.launch {
             val currentTeacherId = getCurrentTeacherId()
@@ -194,6 +197,10 @@ class AttendanceViewModel @Inject constructor(private val firestore: FirebaseFir
     }
 
     fun saveAttendance(groupId: String, attendanceRecords: List<AttendanceRecord>) {
+        val recordDates = attendanceRecords.joinToString { record ->
+            record.date.toString()
+        }
+        Log.d("AttendanceViewModel", "Saving attendance for group: $groupId, records: $attendanceRecords, record dates: $recordDates")
         saveAttendanceScope.launch {
             try {
                 val db = Firebase.firestore
@@ -239,28 +246,30 @@ class AttendanceViewModel @Inject constructor(private val firestore: FirebaseFir
     fun getAttendanceRecordsForGroup(groupId: String, partial: Int): Flow<List<AttendanceRecord>> = flow {
         val db = Firebase.firestore
         try {
+            _isLoading.value = true
             val attendanceRecords = db.collection("attendance")
                 .whereEqualTo("groupId", groupId)
                 .whereEqualTo("partial", partial)
-                .get().await().documents.map { document ->
-                    val student = document.getString("student") ?: ""
-                    val status = document.getString("status")?.let { AttendanceStatus.valueOf(it) } ?: AttendanceStatus.PRESENT
-                    val date = document.getTimestamp("date")?.toDate()?.let {
-                        LocalDate.ofInstant(it.toInstant(), ZoneId.systemDefault())
-                    } ?: LocalDate.now()
-                    val partial = document.getLong("partial")?.toInt() ?: 1
-                    val timestamp = document.getTimestamp("timestamp") ?: com.google.firebase.Timestamp.now()
-
-                    AttendanceRecord(student, groupId, partial, status, date, timestamp)
+                .get().await().documents.mapNotNull { document ->
+                    try {
+                        document.toAttendanceRecord()
+                    } catch (e: Exception) {
+                        Timber.tag("AttendanceViewModel").w(e, "Error converting document to AttendanceRecord")
+                        null // Skip this document if conversion fails
+                    }
                 }
             emit(attendanceRecords)
+            Log.d("AttendanceViewModel", "Emitting attendance records: $attendanceRecords")
         } catch (e: Exception) {
             Timber.tag("AttendanceViewModel").w(e, "Error getting attendance records")
             emit(emptyList())
+        } finally {
+            _isLoading.value = false
         }
     }
 
     fun updateAttendanceRecord(updatedRecord: AttendanceRecord) {
+        Log.d("AttendanceViewModel", "Updating record: $updatedRecord")
         viewModelScope.launch {
             try {
                 val db = Firebase.firestore
@@ -290,6 +299,7 @@ class AttendanceViewModel @Inject constructor(private val firestore: FirebaseFir
     }
 
     fun addOrUpdateAttendanceRecord(record: AttendanceRecord) {
+        Timber.tag("AttendanceViewModel").d("Adding/Updating record: $record")
         _attendanceRecords.value = _attendanceRecords.value.map {
             if (it.student == record.student && it.groupId == record.groupId && it.partial == record.partial && it.date == record.date) {
                 record.copy(timestamp = com.google.firebase.Timestamp.now()) // Update only the timestamp
@@ -333,14 +343,23 @@ class AttendanceViewModel @Inject constructor(private val firestore: FirebaseFir
             "LATE" -> AttendanceStatus.LATE
             else -> null // Handle the case where status is null or unknown
         }
+        val dateMap = get("date") as? Map<*, *>
+        val date = if (dateMap != null) {
+            val year = (dateMap["year"] as? Long)?.toInt() ?: 2024
+            val month = (dateMap["monthValue"] as? Long)?.toInt() ?: 1
+            val day = (dateMap["dayOfMonth"] as? Long)?.toInt() ?: 1
+            Log.d("toAttendanceRecord", "Extracted date: year=$year, month=$month, day=$day")
+            LocalDate.of(year, month, day)
+        } else {
+            LocalDate.now()
+        }
+
         return AttendanceRecord(
             student = getString("student") ?: "",
             groupId = getString("groupId") ?: "",
             partial = getLong("partial")?.toInt() ?: 0,
             status = status, // Use the status obtained from the when expression
-            date = getTimestamp("date")?.toDate()?.let {
-                LocalDate.ofInstant(it.toInstant(), ZoneId.systemDefault())
-            } ?: LocalDate.now(),
+            date = date,
             timestamp = getTimestamp("timestamp")!!
         )
     }

@@ -4,12 +4,18 @@ import android.app.Application
 import com.google.firebase.FirebaseApp
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
+import org.koin.androidx.compose.BuildConfig
 import org.koin.core.context.startKoin
+import timber.log.Timber
 
 class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         FirebaseApp.initializeApp(this)
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        }
+        Timber.d("Timber is initialized")
         startKoin {
             androidLogger()
             androidContext(this@MyApplication)

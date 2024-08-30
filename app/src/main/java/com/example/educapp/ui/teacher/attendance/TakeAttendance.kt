@@ -1,5 +1,6 @@
 package com.example.educapp.ui.teacher.attendance
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,12 +46,9 @@ import androidx.navigation.NavHostController
 import com.example.educapp.R
 import java.time.LocalDate
 import kotlin.collections.find
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.ui.geometry.isEmpty
 import kotlinx.coroutines.delay
+import timber.log.Timber
 
 
 @Composable
@@ -176,6 +174,7 @@ fun TakeAttendanceDetailsScreen(
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
             DatePickerView(selectedDate) { newDate ->
+                Log.d("TakeAttendanceDetailsScreen", "Selected date: $newDate")
                 selectedDate = newDate
                 attendanceList.clear()
                 students.forEach { student ->
@@ -206,6 +205,8 @@ fun TakeAttendanceDetailsScreen(
                         student = record.student,
                         status = record.status,
                         onAttendanceStatusChange = { newStatus ->
+                            Timber.tag("StudentItem")
+                                .d("New status: $newStatus, Date: $selectedDate")
                             val index = attendanceList.indexOf(record)
                             if (index != -1 && newStatus != null) {
                                 attendanceList[index] = record.copy(status = newStatus)

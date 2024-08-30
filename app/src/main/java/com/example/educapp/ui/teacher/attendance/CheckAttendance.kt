@@ -14,12 +14,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.example.educapp.R
 import timber.log.Timber
 import java.time.Instant
 import java.time.LocalDate
@@ -37,6 +40,9 @@ fun CheckScreen(
     var attendanceRecords by remember { mutableStateOf<List<AttendanceRecord>>(emptyList()) }
     var showEditDialog by remember { mutableStateOf(false) }
     var recordToEdit by remember { mutableStateOf<AttendanceRecord?>(null) }
+    val isLoading by viewModel.isLoading.collectAsState()
+    var showSnackbar by remember { mutableStateOf(false) }
+    var snackbarMessage by remember { mutableStateOf("") }
 
     LaunchedEffect(key1 = groupId) {
         viewModel.getAttendanceRecordsForGroup(groupId, currentPartial).collect { records ->
@@ -54,11 +60,20 @@ fun CheckScreen(
                 .padding(16.dp)
         )
 
-        AttendanceSummary(attendanceRecords, { studentName ->
-            recordToEdit = attendanceRecords.find { it.student == studentName }
-            showEditDialog = true
-        }, currentPartial)
-        Log.d("AttendanceRecords", "AttendanceRecords: $attendanceRecords")
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+        } else if (attendanceRecords.isEmpty()) {
+            Text("No attendance records found for this group and partial.", modifier = Modifier.align(
+                Alignment.CenterHorizontally))
+        } else {
+            if (!showEditDialog) { // Only show AttendanceSummary if not editing
+                AttendanceSummary(attendanceRecords, { record ->
+                    recordToEdit = record
+                    showEditDialog = true
+                }, currentPartial)
+                Log.d("AttendanceRecords", "AttendanceRecords: $attendanceRecords")
+            }
+        }
     }
 
     if (showEditDialog && recordToEdit != null) {
@@ -68,6 +83,12 @@ fun CheckScreen(
             onSave = { updatedRecord ->
                 viewModel.updateAttendanceRecord(updatedRecord)
                 showEditDialog = false
+                snackbarMessage = "Attendance updated successfully!"
+                showSnackbar = true
+            },
+            showSnackbar = { message ->
+                snackbarMessage = message
+                showSnackbar = true
             }
         )
     }
@@ -76,7 +97,7 @@ fun CheckScreen(
 @Composable
 fun AttendanceSummary(
     attendanceRecords: List<AttendanceRecord>,
-    onEditClick: (String) -> Unit, // Changed to accept student name
+    onEditClick: (AttendanceRecord) -> Unit,
     currentPartial: Int
 ) {
     val attendanceSummary = attendanceRecords.groupBy { it.student }
@@ -88,6 +109,8 @@ fun AttendanceSummary(
         items(attendanceSummary.entries.toList()) { (student, summary) ->
             var expanded by remember { mutableStateOf(false) }
             val absentCount = summary[AttendanceStatus.ABSENT] ?: 0
+            val presentCount = summary[AttendanceStatus.PRESENT] ?: 0
+            val lateCount = summary[AttendanceStatus.LATE] ?: 0
             val textColor = if (absentCount >= 6) Color.Red else Color.Black
             val boxColor = if (absentCount >= 6) Color.Red.copy(alpha = 0.1f) else Color.Transparent
 
@@ -102,17 +125,19 @@ fun AttendanceSummary(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(8.dp)
-                        .clickable { onEditClick(student) },
-                horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = "Student: $student", color = textColor)
-                    Text(text = "Absent: $absentCount", color = textColor)
+                    Text(
+                        text = "A: $absentCount, P: $presentCount, L: $lateCount",
+                        color = textColor
+                    )
                 }
 
                 if (expanded) {
                     val studentRecords = attendanceRecords.filter { it.student == student }
-                    DetailedAttendanceView(studentRecords, currentPartial)
+                    DetailedAttendanceView(studentRecords, currentPartial, onEditClick)
                 }
             }
         }
@@ -131,6 +156,7 @@ fun StudentItem(student: String, onClick: () -> Unit) {
         Text(text = student, modifier = Modifier.padding(8.dp))
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -173,9 +199,10 @@ fun DatePickerView(selectedDate: LocalDate, onDateChange: (LocalDate) -> Unit) {
 fun EditAttendanceView(
     record: AttendanceRecord,
     onDismiss: () -> Unit,
-    onSave: (AttendanceRecord) -> Unit
+    onSave: (AttendanceRecord) -> Unit,
+    showSnackbar: (String) -> Unit
 ) {
-    var editedRecord by remember { mutableStateOf(record) }
+    var selectedStatus by remember { mutableStateOf(record.status) }
 
     Column(
         modifier = Modifier
@@ -192,30 +219,63 @@ fun EditAttendanceView(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        StudentItem(record.student, editedRecord.status) { status ->
-            if (status != null) {
-                editedRecord = editedRecord.copy(status = status)
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            AttendanceOption(
+                AttendanceStatus.PRESENT,
+                Color.Green,
+                painterResource(id = R.drawable.present_icon),
+                "Present",
+                {
+                    selectedStatus = AttendanceStatus.PRESENT
+                    onSave(record.copy(status = AttendanceStatus.PRESENT))
+                    showSnackbar("Attendance updated successfully!")
+                }
+            )
+            AttendanceOption(
+                AttendanceStatus.LATE,
+                Color.Yellow,
+                painterResource(id = R.drawable.late_icon),
+                "Late",
+                {
+                    selectedStatus = AttendanceStatus.LATE
+                    onSave(record.copy(status = AttendanceStatus.LATE))
+                    showSnackbar("Attendance updated successfully!")
+                }
+            )
+            AttendanceOption(
+                AttendanceStatus.ABSENT,
+                Color.Red,
+                painterResource(id = R.drawable.absent_icon),
+                "Absent",
+                {
+                    selectedStatus = AttendanceStatus.ABSENT
+                    onSave(record.copy(status = AttendanceStatus.ABSENT))
+                    showSnackbar("Attendance updated successfully!")
+                }
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Button(onClick = onDismiss) {
-                Text("Cancel")
-            }
-            Button(onClick = { onSave(editedRecord) }) {
-                Text("Save")
-            }
+            Text("Cancel")
         }
     }
 }
 
 @Composable
-fun DetailedAttendanceView(records: List<AttendanceRecord>, currentPartial: Int) {
+fun DetailedAttendanceView(
+    records: List<AttendanceRecord>,
+    currentPartial: Int,
+    onEditClick: (AttendanceRecord) -> Unit
+) {
     val filteredRecords = records.filter { it.partial == currentPartial }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -229,7 +289,22 @@ fun DetailedAttendanceView(records: List<AttendanceRecord>, currentPartial: Int)
             ) {
                 Text(text = record.date.toString(), color = textColor)
                 Text(text = record.status.toString(), color = textColor)
+                var expanded by remember { mutableStateOf(false) }
+                IconButton(onClick = { expanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(onClick = {
+                        onEditClick(record)
+                        expanded = false
+                    },
+                        text = { Text("Edit") }
+                    )
+                    }
+                }
             }
         }
     }
-}
