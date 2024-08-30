@@ -6,11 +6,12 @@ import androidx.lifecycle.ViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.firestore
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,7 +22,9 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import timber.log.Timber
 import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 data class AttendanceGroup(
@@ -46,18 +49,19 @@ data class AttendanceRecord(
     val date: LocalDate = LocalDate.now(),
     val timestamp: com.google.firebase.Timestamp = com.google.firebase.Timestamp.now(),
 )
-@HiltViewModel
-class AttendanceViewModel @Inject constructor() : ViewModel() {
+
+class AttendanceViewModel @Inject constructor(private val firestore: FirebaseFirestore) : ViewModel() {
 
     private val viewModelJob = SupervisorJob()
     private val viewModelScope = CoroutineScope(Dispatchers.Main + viewModelJob)
     private val _groups = mutableStateListOf<AttendanceGroup>()
     val groups: List<AttendanceGroup> = _groups
-    private val _attendanceRecordsFlow = MutableSharedFlow<List<AttendanceRecord>>()
     private val _attendanceRecords = MutableStateFlow<List<AttendanceRecord>>(emptyList())
     val attendanceRecords: StateFlow<List<AttendanceRecord>> = _attendanceRecords.asStateFlow()
 
     private var groupsListenerRegistration: ListenerRegistration? = null
+    private val saveAttendanceJob = Job()
+    private val saveAttendanceScope = CoroutineScope(Dispatchers.IO + saveAttendanceJob)
 
     init{
         viewModelScope.launch {
@@ -73,7 +77,7 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
                 .whereEqualTo("teacherId", teacherId)
                 .addSnapshotListener { querySnapshot, e ->
                     if (e != null) {
-                        Log.w("AttendanceViewModel", "Error getting groups", e)
+                        Timber.tag("AttendanceViewModel").w(e, "Error getting groups")
                         return@addSnapshotListener
                     }
 
@@ -101,7 +105,7 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
                 val userDoc = db.collection("users").document(user.uid).get().await()
                 userDoc.getString("teacherId") ?: ""
             } catch (e: Exception) {
-                Log.e("AttendanceViewModel", "Error getting teacherId", e)
+                Timber.tag("AttendanceViewModel").e(e, "Error getting teacherId")
                 ""
             }
         } else {
@@ -124,10 +128,11 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
             )
             db.collection("groups").add(data)
                 .addOnSuccessListener { documentReference ->
-                    Log.d("AttendanceViewModel", "Group added with ID: ${documentReference.id}")
+                    Timber.tag("AttendanceViewModel")
+                        .d("Group added with ID: ${documentReference.id}")
                 }
                 .addOnFailureListener { e ->
-                    Log.w("AttendanceViewModel", "Error adding group", e)
+                    Timber.tag("AttendanceViewModel").w(e, "Error adding group")
                 }
         }
     }
@@ -155,13 +160,15 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
                         }
                     } else {
                         // Handle empty snapshot (e.g., show a message to the user)
-                        Log.w("AttendanceViewModel", "No group found with name: ${group.name}")
+                        Timber.tag("AttendanceViewModel")
+                            .w("No group found with name: ${group.name}")
                     }
                 } else {
-                    Log.w("AttendanceViewModel", "Current teacher ID does not match the group's teacher ID")
+                    Timber.tag("AttendanceViewModel")
+                        .w("Current teacher ID does not match the group's teacher ID")
                 }
             } catch (e: Exception) {
-                Log.w("AttendanceViewModel", "Error updating group", e)
+                Timber.tag("AttendanceViewModel").w(e, "Error updating group")
                 // Handle error, e.g., show a Snackbar
             }
             refreshGroups(currentTeacherId)
@@ -176,19 +183,20 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
                         db.collection("groups").document(group.id).delete().await() // Use document ID
                     _groups.remove(group)
                 }else {
-                    Log.w("AttendanceViewModel", "Current teacher ID does not match the group's teacher ID")
+                    Timber.tag("AttendanceViewModel")
+                        .w("Current teacher ID does not match the group's teacher ID")
                 }
             } catch (e: Exception) {
-                Log.w("AttendanceViewModel", "Error deleting group", e)
+                Timber.tag("AttendanceViewModel").w(e, "Error deleting group")
                 // Handle error, e.g., show a Snackbar
             }
         }
     }
 
     fun saveAttendance(groupId: String, attendanceRecords: List<AttendanceRecord>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val db = Firebase.firestore
+        saveAttendanceScope.launch {
             try {
+                val db = Firebase.firestore
                 val batches = attendanceRecords.chunked(500)
                 batches.forEach { batch ->
                     if (!isActive) return@forEach
@@ -217,10 +225,12 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
                     .whereEqualTo("groupId", groupId)
                     .get().await().documents.map { it.toAttendanceRecord() }
                 _attendanceRecords.value = updatedRecords
-                Log.d("AttendanceViewModel", "Attendance saved successfully")
+                Timber.tag("AttendanceViewModel").d("Attendance saved successfully")
             } catch (e: Exception) {
-                Log.w("AttendanceViewModel", "Error saving attendance", e)
-                // Handle the exception
+                Timber.tag("AttendanceViewModel").w("Error saving attendance: ${e.message}")
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Timber.tag("AttendanceViewModel").w("Attendance saving cancelled")
+                }
             }
         }
     }
@@ -231,11 +241,21 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
         try {
             val attendanceRecords = db.collection("attendance")
                 .whereEqualTo("groupId", groupId)
-                .whereEqualTo("partial", partial) // Add filter for partial
-                .get().await().documents.map { it.toAttendanceRecord() }
-            emit(attendanceRecords) // Emit all records for the group and partial
+                .whereEqualTo("partial", partial)
+                .get().await().documents.map { document ->
+                    val student = document.getString("student") ?: ""
+                    val status = document.getString("status")?.let { AttendanceStatus.valueOf(it) } ?: AttendanceStatus.PRESENT
+                    val date = document.getTimestamp("date")?.toDate()?.let {
+                        LocalDate.ofInstant(it.toInstant(), ZoneId.systemDefault())
+                    } ?: LocalDate.now()
+                    val partial = document.getLong("partial")?.toInt() ?: 1
+                    val timestamp = document.getTimestamp("timestamp") ?: com.google.firebase.Timestamp.now()
+
+                    AttendanceRecord(student, groupId, partial, status, date, timestamp)
+                }
+            emit(attendanceRecords)
         } catch (e: Exception) {
-            Log.w("AttendanceViewModel", "Error getting attendance records", e)
+            Timber.tag("AttendanceViewModel").w(e, "Error getting attendance records")
             emit(emptyList())
         }
     }
@@ -261,10 +281,10 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
                         if (it.student == updatedRecord.student && it.date == updatedRecord.date) updatedRecord else it
                     }
                 } else {
-                    Log.w("AttendanceViewModel", "No attendance record found for update")
+                    Timber.tag("AttendanceViewModel").w("No attendance record found for update")
                 }
             } catch (e: Exception) {
-                Log.w("AttendanceViewModel", "Error updating attendance record", e)
+                Timber.tag("AttendanceViewModel").w(e, "Error updating attendance record")
             }
         }
     }
@@ -299,7 +319,7 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
                     }
                 }
                 .addOnFailureListener { e ->
-                    Log.w("AttendanceViewModel", "Error getting groups", e)
+                    Timber.tag("AttendanceViewModel").w(e, "Error getting groups")
                 }
         }
     }
@@ -318,12 +338,16 @@ class AttendanceViewModel @Inject constructor() : ViewModel() {
             groupId = getString("groupId") ?: "",
             partial = getLong("partial")?.toInt() ?: 0,
             status = status, // Use the status obtained from the when expression
+            date = getTimestamp("date")?.toDate()?.let {
+                LocalDate.ofInstant(it.toInstant(), ZoneId.systemDefault())
+            } ?: LocalDate.now(),
             timestamp = getTimestamp("timestamp")!!
         )
     }
 
     override fun onCleared() {
         super.onCleared()
-        viewModelJob.cancel() // Cancel the SupervisorJob when ViewModel is cleared
+        viewModelJob.cancel()
+        saveAttendanceJob.cancel()// Cancel the SupervisorJob when ViewModel is cleared
     }
 }

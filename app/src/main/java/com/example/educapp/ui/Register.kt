@@ -46,8 +46,10 @@ import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.ktx.firestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import org.koin.androidx.compose.koinViewModel
+import javax.inject.Inject
 
-class RegistrationViewModel(private val context: Context) : ViewModel() {
+class RegistrationViewModel @Inject constructor(private val context: Context) : ViewModel() {
     private val auth = Firebase.auth
     private val db = Firebase.firestore
     var role by mutableStateOf<UserRole?>(null)
@@ -143,22 +145,10 @@ class RegistrationViewModel(private val context: Context) : ViewModel() {
     }
     }
 
-class RegistrationViewModelFactory(private val context: Context) :
-    ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(RegistrationViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return RegistrationViewModel(context) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegistrationScreen(navController: NavController) {
-    val context = LocalContext.current
-    val viewModel = viewModel<RegistrationViewModel>(factory = RegistrationViewModelFactory(context))
+    val viewModel: RegistrationViewModel = koinViewModel()
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }

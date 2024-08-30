@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -54,7 +55,7 @@ fun NewPlanScreen(navController: NavController, viewModel: PlannerViewModel) {
                 title = { Text("New Lesson Plan") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Filled.ArrowBack, "Go Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
                     }
                 },
                 actions = {

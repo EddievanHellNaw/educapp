@@ -7,8 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -28,9 +26,9 @@ import com.example.educapp.ui.teacher.planner.NewPlanScreen
 import com.example.educapp.ui.teacher.planner.PlannerViewModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
-import dagger.hilt.android.AndroidEntryPoint
+import org.koin.androidx.compose.koinViewModel
 
-@AndroidEntryPoint
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,7 +77,7 @@ fun MainScreen() {
         navigation(startDestination = "teacher/main", route = "teacher") {
             composable("teacher/main") { TeacherMainScreen(navController) }
             composable("teacher/attendance") {
-                val viewModel = hiltViewModel<AttendanceViewModel>()
+                val viewModel: AttendanceViewModel = koinViewModel()
                 AttendanceScreen(viewModel, navController)
             }
             composable(
@@ -87,7 +85,7 @@ fun MainScreen() {
                 arguments = listOf(navArgument("groupId") { type = NavType.StringType })
             ) { backStackEntry ->
                 val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
-                val viewModel: AttendanceViewModel = viewModel()
+                val viewModel: AttendanceViewModel = koinViewModel()
                 TakeAttendanceScreen(viewModel, groupId, navController)
             }
             composable(
@@ -99,7 +97,7 @@ fun MainScreen() {
             ) { backStackEntry ->
                 val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
                 val partial = backStackEntry.arguments?.getInt("partial") ?: 1
-                val viewModel: AttendanceViewModel = viewModel()
+                val viewModel: AttendanceViewModel = koinViewModel()
                 TakeAttendanceDetailsScreen(viewModel, groupId, partial, navController)
             }
             composable(
@@ -111,13 +109,13 @@ fun MainScreen() {
             ) { backStackEntry ->
                 val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
                 val partial = backStackEntry.arguments?.getInt("partial") ?: 1
-                val viewModel: AttendanceViewModel = viewModel()
-                CheckScreen(viewModel, groupId, partial)
+                val viewModel: AttendanceViewModel = koinViewModel()
+                CheckScreen(viewModel, groupId, partial, navController)
             }
 
-            composable("teacher/planner") { val viewModel = hiltViewModel<PlannerViewModel>()
+            composable("teacher/planner") { val viewModel: PlannerViewModel = koinViewModel()
                 MainPlannerScreen(navController, viewModel) }
-            composable ("teacher/newPlan") { val viewModel = hiltViewModel<PlannerViewModel>()
+            composable ("teacher/newPlan") { val viewModel: PlannerViewModel = koinViewModel()
                 NewPlanScreen(navController, viewModel)}       }
     }
 }

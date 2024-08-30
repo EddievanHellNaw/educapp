@@ -10,16 +10,8 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
-
-    buildscript {
-        repositories {
-            google()
-            mavenCentral()
-            mavenLocal()
-        }
-    }
-
 }
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {

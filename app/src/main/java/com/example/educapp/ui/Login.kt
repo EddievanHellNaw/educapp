@@ -1,14 +1,12 @@
 package com.example.educapp.ui
 
 import android.util.Log
-import androidx.activity.result.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -25,18 +23,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import kotlinx.coroutines.launch
+import org.koin.androidx.compose.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+
 @Composable
 fun LoginScreen(navController: NavController) {
     val context = LocalContext.current
-    val viewModel = viewModel<RegistrationViewModel>(
-        factory = RegistrationViewModelFactory(context)
-    )
+    val viewModel: RegistrationViewModel = koinViewModel()
     var usernameEmail by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loginSuccess by remember { mutableStateOf<Boolean?>(null) }

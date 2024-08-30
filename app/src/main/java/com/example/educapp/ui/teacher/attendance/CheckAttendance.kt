@@ -1,5 +1,6 @@
 package com.example.educapp.ui.teacher.attendance
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,25 +19,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
+import timber.log.Timber
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
 
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CheckScreen(
     viewModel: AttendanceViewModel,
     groupId: String,
-    currentPartial: Int
+    currentPartial: Int,
+    navController: NavHostController
 ) {
     var attendanceRecords by remember { mutableStateOf<List<AttendanceRecord>>(emptyList()) }
-    var expandedStudent by remember { mutableStateOf<String?>(null) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var recordToEdit by remember { mutableStateOf<AttendanceRecord?>(null) }
 
     LaunchedEffect(key1 = groupId) {
         viewModel.getAttendanceRecordsForGroup(groupId, currentPartial).collect { records ->
             attendanceRecords = records
+
         }
     }
 
@@ -49,20 +54,65 @@ fun CheckScreen(
                 .padding(16.dp)
         )
 
-        LazyColumn {
-            items(attendanceRecords) { record ->
-                StudentItem(
-                    student = record.student,
-                    onClick = {
-                        expandedStudent = if (expandedStudent == record.student) null else record.student
-                    }
-                )
-                if (expandedStudent == record.student) {
-                    DetailedAttendanceView(
-                        records = attendanceRecords.filter {
-                            it.student == record.student && it.partial == currentPartial
-                        }
-                    )
+        AttendanceSummary(attendanceRecords, { studentName ->
+            recordToEdit = attendanceRecords.find { it.student == studentName }
+            showEditDialog = true
+        }, currentPartial)
+        Log.d("AttendanceRecords", "AttendanceRecords: $attendanceRecords")
+    }
+
+    if (showEditDialog && recordToEdit != null) {
+        EditAttendanceView(
+            record = recordToEdit!!,
+            onDismiss = { showEditDialog = false },
+            onSave = { updatedRecord ->
+                viewModel.updateAttendanceRecord(updatedRecord)
+                showEditDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun AttendanceSummary(
+    attendanceRecords: List<AttendanceRecord>,
+    onEditClick: (String) -> Unit, // Changed to accept student name
+    currentPartial: Int
+) {
+    val attendanceSummary = attendanceRecords.groupBy { it.student }
+        .mapValues { (_, records) ->
+            records.groupingBy { it.status }.eachCount()
+        }
+
+    LazyColumn {
+        items(attendanceSummary.entries.toList()) { (student, summary) ->
+            var expanded by remember { mutableStateOf(false) }
+            val absentCount = summary[AttendanceStatus.ABSENT] ?: 0
+            val textColor = if (absentCount >= 6) Color.Red else Color.Black
+            val boxColor = if (absentCount >= 6) Color.Red.copy(alpha = 0.1f) else Color.Transparent
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+                    .background(boxColor)
+                    .clickable { expanded = !expanded }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                        .clickable { onEditClick(student) },
+                horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "Student: $student", color = textColor)
+                    Text(text = "Absent: $absentCount", color = textColor)
+                }
+
+                if (expanded) {
+                    val studentRecords = attendanceRecords.filter { it.student == student }
+                    DetailedAttendanceView(studentRecords, currentPartial)
                 }
             }
         }
@@ -165,85 +215,8 @@ fun EditAttendanceView(
 }
 
 @Composable
-fun AttendanceSummary(
-    attendanceRecords: List<AttendanceRecord>,
-    onEditClick: (AttendanceRecord) -> Unit
-) {
-    var selectedStudent by remember { mutableStateOf<String?>(null) }
-    var expandedStudent by remember { mutableStateOf<String?>(null) }
-    val attendanceSummary = attendanceRecords.groupBy { it.student }
-        .mapValues { (_, records) ->
-            records.groupingBy { it.status }.eachCount()
-        }
-
-    LazyColumn {
-        items(attendanceSummary.entries.toList()) { (student, summary) ->
-            val absentCount = summary[AttendanceStatus.ABSENT] ?: 0
-            val textColor = if (absentCount >= 6) Color.Red else Color.Black
-            val boxColor = if (absentCount >= 6) Color.Red.copy(alpha = 0.1f) else Color.Transparent
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
-                    .background(boxColor)
-                    .clickable {
-                        selectedStudent = if (selectedStudent == student) null else student
-                    }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Student: $student", color = textColor)
-
-                    Box {
-                        IconButton(onClick = { expandedStudent = student }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Menu")
-                        }
-                        DropdownMenu(
-                            expanded = expandedStudent == student,
-                            onDismissRequest = { expandedStudent = null }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Edit") },
-                                onClick = {
-                                    val recordToEdit = attendanceRecords.find { it.student == student }
-                                    if (recordToEdit != null) {
-                                        onEditClick(recordToEdit)
-                                    }
-                                    expandedStudent = null
-                                }
-                            )
-                        }
-                    }
-                }
-
-                summary.forEach { (status, count) ->
-                    Text(text = "- $status: $count", color = textColor)
-                }
-
-                if (selectedStudent == student) {
-                    val studentRecords = attendanceRecords.filter { it.student == student }
-                    DetailedAttendanceView(studentRecords)
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        }
-    }
-}
-
-@Composable
-fun DetailedAttendanceView(records: List<AttendanceRecord>) {
-    val filteredRecords = records
-        .groupBy { it.date }
-        .flatMap { entry ->
-            entry.value.sortedByDescending { it.timestamp.toDate() }.take(1)
-        }
+fun DetailedAttendanceView(records: List<AttendanceRecord>, currentPartial: Int) {
+    val filteredRecords = records.filter { it.partial == currentPartial }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         filteredRecords.forEach { record ->

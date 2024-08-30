@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.geometry.isEmpty
+import kotlinx.coroutines.delay
 
 
 @Composable
@@ -245,6 +246,12 @@ fun TakeAttendanceDetailsScreen(
                 },
                 modifier = Modifier.padding(16.dp)
             ) { Text("Attendance saved successfully!") }
+            LaunchedEffect(key1 = showSnackbar) {
+                if (showSnackbar) {
+                    delay(9000) // Adjust delay as needed
+                    showSnackbar = false
+                }
+            }
         }
     }
 }
