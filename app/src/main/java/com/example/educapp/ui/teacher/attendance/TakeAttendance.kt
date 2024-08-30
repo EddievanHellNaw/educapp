@@ -22,6 +22,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -159,102 +160,106 @@ fun TakeAttendanceDetailsScreen(
         allStudentsHaveRecord = attendanceList.all { it.status != null }
     }
 
-    Column(modifier = Modifier.padding(16.dp)) {
-        DatePickerView(selectedDate) { newDate ->
-            selectedDate = newDate
-            // Update attendanceList when the date changes
-            attendanceList.clear()
-            students.forEach { student ->
-                val existingRecord = attendanceRecords.find {
-                    it.student == student && it.date == selectedDate
+    Scaffold(
+        bottomBar = {
+            if (allStudentsHaveRecord) {
+                Button(
+                    onClick = { showConfirmationDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text("Confirm Attendance")
                 }
-                if (existingRecord != null) {
-                    attendanceList.add(existingRecord)
-                } else {
-                    attendanceList.add(
-                        AttendanceRecord(
-                            student = student,
-                            groupId = groupId,
-                            partial = partial,
-                            date = selectedDate
+            }
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.padding(paddingValues)) {
+            DatePickerView(selectedDate) { newDate ->
+                selectedDate = newDate
+                attendanceList.clear()
+                students.forEach { student ->
+                    val existingRecord = attendanceRecords.find {
+                        it.student == student && it.date == selectedDate
+                    }
+                    if (existingRecord != null) {
+                        attendanceList.add(existingRecord)
+                    } else {
+                        attendanceList.add(
+                            AttendanceRecord(
+                                student = student,
+                                groupId = groupId,
+                                partial = partial,
+                                date = selectedDate
+                            )
                         )
+                    }
+                }
+                allStudentsHaveRecord = attendanceList.all { it.status != null }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(attendanceList) { record ->
+                    StudentItem(
+                        student = record.student,
+                        status = record.status,
+                        onAttendanceStatusChange = { newStatus ->
+                            val index = attendanceList.indexOf(record)
+                            if (index != -1 && newStatus != null) {
+                                attendanceList[index] = record.copy(status = newStatus)
+                                viewModel.addOrUpdateAttendanceRecord(attendanceList[index])
+                            }
+                            allStudentsHaveRecord = attendanceList.all { it.status != null }
+                        }
                     )
                 }
             }
-            allStudentsHaveRecord = attendanceList.all { it.status != null }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-            items(attendanceList) { record ->
-                StudentItem(
-                    student = record.student,
-                    status = record.status,
-                    onAttendanceStatusChange = { newStatus ->
-                        val index = attendanceList.indexOf(record)
-                        if (index != -1 && newStatus != null) { // Only update if newStatus is not null
-                            attendanceList[index] = record.copy(status = newStatus)
-                            viewModel.addOrUpdateAttendanceRecord(attendanceList[index])
+            if (showConfirmationDialog) {
+                AlertDialog(
+                    onDismissRequest = { showConfirmationDialog = false },
+                    title = { Text("Confirm Attendance") },
+                    text = { Text("Are you sure you want to save the attendance?") },
+                    confirmButton = {
+                        Button(onClick = {
+                            viewModel.saveAttendance(groupId, attendanceList)
+                            showConfirmationDialog = false
+                            showSnackbar = true
+                            navController.popBackStack()
+                        }) {
+                            Text("Confirm")
                         }
-                        allStudentsHaveRecord = attendanceList.all { it.status != null }
+                    },
+                    dismissButton = {
+                        Button(onClick = { showConfirmationDialog = false }) {
+                            Text("Cancel")
+                        }
                     }
                 )
             }
-        }
 
-        if (allStudentsHaveRecord) {
-            Button(
-                onClick = { showConfirmationDialog = true },
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .fillMaxWidth()
-            ) {
-                Text("Confirm Attendance")
-            }
-        }
-
-        if (showConfirmationDialog) {
-            AlertDialog(
-                onDismissRequest = { showConfirmationDialog = false },
-                title = { Text("Confirm Attendance") },
-                text = { Text("Are you sure you want to save the attendance?") },
-                confirmButton = {
-                    Button(onClick = {
-                        viewModel.saveAttendance(groupId, attendanceList)
-                        showConfirmationDialog = false
-                        showSnackbar = true
-                        navController.popBackStack()
-                    }) {
-                        Text("Confirm")
+            if (showSnackbar) {
+                Snackbar(
+                    action = {
+                        TextButton(onClick = { showSnackbar = false }) {
+                            Text("OK")
+                        }
+                    },
+                    modifier = Modifier.padding(16.dp)
+                ) { Text("Attendance saved successfully!") }
+                LaunchedEffect(key1 = showSnackbar) {
+                    if (showSnackbar) {
+                        delay(9000)
+                        showSnackbar = false
                     }
-                },
-                dismissButton = {
-                    Button(onClick = { showConfirmationDialog = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
-
-        if (showSnackbar) {
-            Snackbar(
-                action = {
-                    TextButton(onClick = { showSnackbar = false }) {
-                        Text("OK")
-                    }
-                },
-                modifier = Modifier.padding(16.dp)
-            ) { Text("Attendance saved successfully!") }
-            LaunchedEffect(key1 = showSnackbar) {
-                if (showSnackbar) {
-                    delay(9000) // Adjust delay as needed
-                    showSnackbar = false
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun StudentItem(
