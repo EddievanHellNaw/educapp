@@ -3,29 +3,34 @@ package com.example.educapp.ui.teacher.attendance
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.get
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import timber.log.Timber
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 data class AttendanceGroup(
     var id: String = "",
@@ -58,10 +63,10 @@ class AttendanceViewModel @Inject constructor(private val firestore: FirebaseFir
     val groups: List<AttendanceGroup> = _groups
     private val _attendanceRecords = MutableStateFlow<List<AttendanceRecord>>(emptyList())
     val attendanceRecords: StateFlow<List<AttendanceRecord>> = _attendanceRecords.asStateFlow()
-
+    private val _snackbarMessage = MutableStateFlow<Event<String>?>(null)
+    val snackbarMessage: StateFlow<Event<String>?> = _snackbarMessage.asStateFlow()
     private var groupsListenerRegistration: ListenerRegistration? = null
     private val saveAttendanceJob = Job()
-    private val saveAttendanceScope = CoroutineScope(Dispatchers.IO + saveAttendanceJob)
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -197,50 +202,60 @@ class AttendanceViewModel @Inject constructor(private val firestore: FirebaseFir
     }
 
     fun saveAttendance(groupId: String, attendanceRecords: List<AttendanceRecord>) {
-        val recordDates = attendanceRecords.joinToString { record ->
-            record.date.toString()
-        }
-        Log.d("AttendanceViewModel", "Saving attendance for group: $groupId, records: $attendanceRecords, record dates: $recordDates")
-        saveAttendanceScope.launch {
+        viewModelScope.launch {
             try {
-                val db = Firebase.firestore
-                val batches = attendanceRecords.chunked(500)
-                batches.forEach { batch ->
-                    if (!isActive) return@forEach
-                    val batchOperation = db.batch()
-                    batch.forEach { record ->
-                        val query = db.collection("attendance")
-                            .whereEqualTo("student", record.student)
-                            .whereEqualTo("groupId", record.groupId)
-                            .whereEqualTo("partial", record.partial)
-                            .whereEqualTo("date", record.date)
-                        val existingRecord = query.get().await().documents.firstOrNull()
+                _isLoading.value = true
+
+                val updatedRecords = attendanceRecords.map { record ->
+                    val dateTimestamp = com.google.firebase.Timestamp(
+                        record.date.atStartOfDay(ZoneId.systemDefault()).toEpochSecond(), 0
+                    )
+                    val query = firestore.collection("attendance")
+                        .whereEqualTo("student", record.student)
+                        .whereEqualTo("groupId", record.groupId)
+                        .whereEqualTo("partial", record.partial)
+                        .whereEqualTo("date", dateTimestamp)
+
+                    val querySnapshot = query.get().await() // Get QuerySnapshot synchronously before the transaction
+                    val existingRecord = querySnapshot.documents.firstOrNull()
+
+                    // Perform the update or set operation within the transaction
+                    firestore.runTransaction { transaction ->
                         if (existingRecord != null) {
-                            batchOperation.update(
-                                db.collection("attendance").document(existingRecord.id),
-                                "status",
-                                record.status
+                            transaction.update(
+                                firestore.collection("attendance").document(existingRecord.id),
+                                "status", record.status
                             )
                         } else {
-                            batchOperation.set(db.collection("attendance").document(), record)
+                            transaction.set(firestore.collection("attendance").document(), record)
                         }
-                    }
-                    batchOperation.commit().await()
+                    }.await() // Get the result of the transaction synchronously
+
+                    // Fetch the updated record (or the newly created record)
+                    val updatedRecordQuery = firestore.collection("attendance")
+                        .whereEqualTo("student", record.student)
+                        .whereEqualTo("groupId", record.groupId)
+                        .whereEqualTo("partial", record.partial)
+                        .whereEqualTo("date", dateTimestamp)
+                    val updatedRecordSnapshot = updatedRecordQuery.get().await()
+                    updatedRecordSnapshot.documents.firstOrNull()?.toObject(AttendanceRecord::class.java)
                 }
-                // Refresh attendance records from Firestore
-                val updatedRecords = db.collection("attendance")
-                    .whereEqualTo("groupId", groupId)
-                    .get().await().documents.map { it.toAttendanceRecord() }
-                _attendanceRecords.value = updatedRecords
-                Timber.tag("AttendanceViewModel").d("Attendance saved successfully")
+
+                _attendanceRecords.value = updatedRecords.filterNotNull()
+                _isLoading.value = false
+                _snackbarMessage.value = Event("Attendance saved successfully")
+            } catch (e: FirebaseFirestoreException) {
+                Timber.tag("AttendanceViewModel").w(e, "Firestore error saving attendance")
+                _isLoading.value = false
+                _snackbarMessage.value = Event("Error saving attendance: ${e.message}")
             } catch (e: Exception) {
-                Timber.tag("AttendanceViewModel").w("Error saving attendance: ${e.message}")
-                if (e is kotlinx.coroutines.CancellationException) {
-                    Timber.tag("AttendanceViewModel").w("Attendance saving cancelled")
-                }
+                Timber.tag("AttendanceViewModel").w(e, "Error saving attendance")
+                _isLoading.value = false
+                _snackbarMessage.value = Event("Error saving attendance")
             }
         }
     }
+
 
 
     fun getAttendanceRecordsForGroup(groupId: String, partial: Int): Flow<List<AttendanceRecord>> = flow {

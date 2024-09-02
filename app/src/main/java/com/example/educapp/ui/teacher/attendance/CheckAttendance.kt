@@ -1,6 +1,7 @@
 package com.example.educapp.ui.teacher.attendance
 
 import android.util.Log
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,9 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.example.educapp.R
 import timber.log.Timber
@@ -47,13 +50,12 @@ fun CheckScreen(
     LaunchedEffect(key1 = groupId) {
         viewModel.getAttendanceRecordsForGroup(groupId, currentPartial).collect { records ->
             attendanceRecords = records
-
         }
     }
 
     Column {
         Text(
-            text = "Total Attendance for Partial $currentPartial",
+            text = if (showEditDialog) "" else "Total Attendance for Partial $currentPartial",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier
                 .fillMaxWidth()
@@ -63,8 +65,10 @@ fun CheckScreen(
         if (isLoading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         } else if (attendanceRecords.isEmpty()) {
-            Text("No attendance records found for this group and partial.", modifier = Modifier.align(
-                Alignment.CenterHorizontally))
+            Text(
+                "No attendance records found for this group and partial.",
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
         } else {
             if (!showEditDialog) { // Only show AttendanceSummary if not editing
                 AttendanceSummary(attendanceRecords, { record ->
@@ -203,6 +207,16 @@ fun EditAttendanceView(
     showSnackbar: (String) -> Unit
 ) {
     var selectedStatus by remember { mutableStateOf(record.status) }
+    var showConfirmationDialog by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    val statusColor by animateColorAsState(
+        targetValue = when (selectedStatus) {
+            AttendanceStatus.PRESENT -> Color.Green
+            AttendanceStatus.LATE -> Color.Yellow
+            AttendanceStatus.ABSENT -> Color.Red
+            else -> Color.LightGray
+        }
+    )
 
     Column(
         modifier = Modifier
@@ -210,12 +224,32 @@ fun EditAttendanceView(
             .padding(16.dp)
     ) {
         Text(
-            text = "Edit Attendance for ${record.student}",
+            text = "Editing attendance for ${record.student} on ${record.date}",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Visual confirmation
+        if (selectedStatus != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+                    .height(64.dp)
+                    .background(statusColor, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = selectedStatus.toString(),
+                    color = Color.Black, // Use a contrasting color for text
+                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -228,44 +262,76 @@ fun EditAttendanceView(
                 AttendanceStatus.PRESENT,
                 Color.Green,
                 painterResource(id = R.drawable.present_icon),
-                "Present",
                 {
                     selectedStatus = AttendanceStatus.PRESENT
-                    onSave(record.copy(status = AttendanceStatus.PRESENT))
-                    showSnackbar("Attendance updated successfully!")
                 }
             )
             AttendanceOption(
                 AttendanceStatus.LATE,
                 Color.Yellow,
                 painterResource(id = R.drawable.late_icon),
-                "Late",
                 {
                     selectedStatus = AttendanceStatus.LATE
-                    onSave(record.copy(status = AttendanceStatus.LATE))
-                    showSnackbar("Attendance updated successfully!")
                 }
             )
             AttendanceOption(
                 AttendanceStatus.ABSENT,
                 Color.Red,
                 painterResource(id = R.drawable.absent_icon),
-                "Absent",
                 {
                     selectedStatus = AttendanceStatus.ABSENT
-                    onSave(record.copy(status = AttendanceStatus.ABSENT))
-                    showSnackbar("Attendance updated successfully!")
                 }
             )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        if (selectedStatus != null) {
+            Button(
+                onClick = { showConfirmationDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(ButtonDefaults.IconSize),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Save")
+                }
+            }
+        }
+
         Button(
             onClick = onDismiss,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Cancel")
+        }
+
+        if (showConfirmationDialog) {
+            AlertDialog(
+                onDismissRequest = { showConfirmationDialog = false },
+                title = { Text("Confirm Attendance") },
+                text = { Text("Are you sure you want to save the attendance?") },
+                confirmButton = {
+                    Button(onClick = {
+                        if (selectedStatus != null) {
+                            onSave(record.copy(status = selectedStatus))
+                            showSnackbar("Attendance updated successfully!")
+                        }
+                        showConfirmationDialog = false
+                    }) {
+                        Text("Confirm")
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { showConfirmationDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

@@ -101,21 +101,38 @@ fun NewPlanScreen(navController: NavController, viewModel: PlannerViewModel) {
                 factory = { context ->
                     WebView(context).apply {
                         settings.javaScriptEnabled = true
-                        loadDataWithBaseURL(
-                            null,
-                            "<html><head><style>body{font-size:16px;}</style></head><body><div id='editor'></div></body></html>",
-                            "text/html",
-                            "UTF-8",
-                            null
-                        )
                         webViewClient = object : WebViewClient() {
-                            override fun onPageFinished(view: WebView?, url: String?) {
+                            override fun onPageFinished(view: WebView, url: String) {
+                                super.onPageFinished(view, url)
                                 val js = "var quill = new Quill('#editor', { modules: { toolbar: true }, theme: 'snow' });"
-                                evaluateJavascript(js) {
+                                view.evaluateJavascript(js) { result ->
                                     quillEditor = this@apply
                                 }
                             }
                         }
+                        loadDataWithBaseURL(
+                            null,
+                            """
+                            <html>
+                            <head>
+                                <style>body{font-size:16px;}
+                                .ql-container {
+  height: calc(100vh - 10vw) !important;
+}
+                                
+                                </style>
+                                <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+                                <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+                            </head>
+                            <body>
+                                <div id='editor'></div>
+                            </body>
+                            </html>
+                            """.trimIndent(),
+                                                    "text/html",
+                                                    "UTF-8",
+                                                    null
+                        )
                     }
                 },
                 modifier = Modifier.weight(1f)

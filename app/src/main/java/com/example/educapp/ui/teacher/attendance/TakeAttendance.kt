@@ -21,10 +21,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,7 +52,6 @@ import kotlin.collections.find
 import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.delay
 import timber.log.Timber
-
 
 @Composable
 fun TakeAttendanceScreen(viewModel: AttendanceViewModel, groupId: String, navController: NavHostController) {
@@ -128,11 +130,13 @@ fun TakeAttendanceDetailsScreen(
     val attendanceRecords by viewModel.attendanceRecords.collectAsState()
     var showConfirmationDialog by remember { mutableStateOf(false) }
     var showSnackbar by remember { mutableStateOf(false) }
+    var showGoBackButton by remember { mutableStateOf(false) }
     val group = viewModel.groups.find { it.id == groupId }
     val students = group?.students ?: emptyList()
-
+    val isLoading by viewModel.isLoading.collectAsState()
     val attendanceList = remember { mutableStateListOf<AttendanceRecord>() }
     var allStudentsHaveRecord by remember { mutableStateOf(false) }
+    var buttonText by remember { mutableStateOf("Confirm Attendance") }
 
     LaunchedEffect(key1 = students) {
         if (attendanceList.isEmpty()) {
@@ -159,15 +163,33 @@ fun TakeAttendanceDetailsScreen(
     }
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                hostState = remember { SnackbarHostState() }
+            )
+        },
         bottomBar = {
             if (allStudentsHaveRecord) {
                 Button(
-                    onClick = { showConfirmationDialog = true },
+                    onClick = { if (buttonText == "Confirm Attendance") {
+                        showConfirmationDialog = true
+                        } else {
+                        navController.popBackStack()
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(16.dp),
+                    enabled = !isLoading
                 ) {
-                    Text("Confirm Attendance")
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(ButtonDefaults.IconSize),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Text(buttonText)
+                    }
                 }
             }
         }
@@ -224,13 +246,24 @@ fun TakeAttendanceDetailsScreen(
                     title = { Text("Confirm Attendance") },
                     text = { Text("Are you sure you want to save the attendance?") },
                     confirmButton = {
-                        Button(onClick = {
-                            viewModel.saveAttendance(groupId, attendanceList)
-                            showConfirmationDialog = false
-                            showSnackbar = true
-                            navController.popBackStack()
-                        }) {
-                            Text("Confirm")
+                        if (!showGoBackButton) {
+                            Button(onClick = {
+                                viewModel.saveAttendance(groupId, attendanceList)
+                                showConfirmationDialog = false
+                                showGoBackButton = true
+                                buttonText = "Go Back"
+                                showSnackbar = true
+                            }) {
+                                Text("Confirm")
+                            }
+                        } else {
+                            Button(onClick = {
+                                navController.popBackStack()
+                                showConfirmationDialog = false
+                                showGoBackButton = false
+                            }) {
+                                Text("Go Back")
+                            }
                         }
                     },
                     dismissButton = {
@@ -301,7 +334,6 @@ fun StudentItem(
                         AttendanceStatus.PRESENT,
                         Color.Green,
                         painterResource(id = R.drawable.present_icon),
-                        "Present",
                         {
                             selectedStatus = AttendanceStatus.PRESENT
                             onAttendanceStatusChange(AttendanceStatus.PRESENT)
@@ -311,7 +343,6 @@ fun StudentItem(
                         AttendanceStatus.LATE,
                         Color.Yellow,
                         painterResource(id = R.drawable.late_icon),
-                        "Late",
                         {
                             selectedStatus = AttendanceStatus.LATE
                             onAttendanceStatusChange(AttendanceStatus.LATE)
@@ -321,7 +352,6 @@ fun StudentItem(
                         AttendanceStatus.ABSENT,
                         Color.Red,
                         painterResource(id = R.drawable.absent_icon),
-                        "Absent",
                         {
                             selectedStatus = AttendanceStatus.ABSENT
                             onAttendanceStatusChange(AttendanceStatus.ABSENT)
@@ -368,7 +398,6 @@ fun AttendanceOption(
     status: AttendanceStatus,
     color: Color,
     image: Painter,
-    text: String,
     onClick: () -> Unit
 ) {
     var isClicked by remember { mutableStateOf(false) }
@@ -390,7 +419,6 @@ fun AttendanceOption(
                 modifier = Modifier.size(30.dp)
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text, color = Color.Black, fontWeight = FontWeight.Bold)
         }
     }
 }
