@@ -91,6 +91,7 @@ fun MainPlannerScreen(navController: NavController, viewModel: PlannerViewModel)
                     showDialog = true
                     lessonPlanToDelete = lessonPlan
                 }
+                , navController
             )
         }
     }
@@ -101,11 +102,12 @@ fun MainPlannerScreen(navController: NavController, viewModel: PlannerViewModel)
 fun LessonPlanList(
     lessonPlans: List<LessonPlan>,
     onEdit: (LessonPlan) -> Unit,
-    onDelete: (LessonPlan) -> Unit
+    onDelete: (LessonPlan) -> Unit,
+    navController: NavController
 ) {
     LazyColumn {
         items(lessonPlans) { lessonPlan ->
-            LessonPlanCard(lessonPlan, onEdit, onDelete)
+            LessonPlanCard(lessonPlan, onEdit, onDelete, navController)
         }
     }
 }
@@ -115,14 +117,15 @@ fun LessonPlanList(
 fun LessonPlanCard(
     lessonPlan: LessonPlan,
     onEdit: (LessonPlan) -> Unit,
-    onDelete: (LessonPlan) -> Unit
+    onDelete: (LessonPlan) -> Unit,
+    navController: NavController
 ) {
     var expanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
-            .clickable { expanded = !expanded }
+            .clickable { navController.navigate("teacher/lessonPlanDetails/${lessonPlan.id}") }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(

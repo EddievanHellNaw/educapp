@@ -21,6 +21,7 @@ import com.example.educapp.ui.teacher.attendance.AttendanceViewModel
 import com.example.educapp.ui.teacher.attendance.CheckScreen
 import com.example.educapp.ui.teacher.attendance.TakeAttendanceDetailsScreen
 import com.example.educapp.ui.teacher.attendance.TakeAttendanceScreen
+import com.example.educapp.ui.teacher.planner.LessonPlanDetailsScreen
 import com.example.educapp.ui.teacher.planner.MainPlannerScreen
 import com.example.educapp.ui.teacher.planner.NewPlanScreen
 import com.example.educapp.ui.teacher.planner.PlannerViewModel
@@ -116,6 +117,13 @@ fun MainScreen() {
             composable("teacher/planner") { val viewModel: PlannerViewModel = koinViewModel()
                 MainPlannerScreen(navController, viewModel) }
             composable ("teacher/newPlan") { val viewModel: PlannerViewModel = koinViewModel()
-                NewPlanScreen(navController, viewModel)}       }
+                NewPlanScreen(navController, viewModel)}
+            composable("teacher/lessonPlanDetails/{lessonPlanId}") { backStackEntry ->
+                val lessonPlanId = backStackEntry.arguments?.getString("lessonPlanId") ?: ""
+                val viewModel: PlannerViewModel = koinViewModel()
+                LessonPlanDetailsScreen(lessonPlanId, viewModel, navController)
+            }
+
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.example.educapp.ui.teacher.planner
 
 import android.util.Log
 import androidx.compose.animation.core.copy
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.DocumentSnapshot
@@ -12,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.runtime.State
+import timber.log.Timber
 
 data class LessonPlan(
     val id: String = "", // Document ID in Firestore
@@ -43,19 +46,9 @@ class PlannerViewModel : ViewModel() {
 
     fun getLessonPlans() {
         viewModelScope.launch {
-            val db = Firebase.firestore
             try {
-                db.collection("lessonPlans")
-                    .get()
-                    .addOnSuccessListener { querySnapshot ->
-                        _lessonPlans.value = querySnapshot.documents.map { document ->
-                            document.toLessonPlan()
-                        }
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("PlannerViewModel", "Error getting lesson plans", e)
-                        // Handle error
-                    }
+                val querySnapshot = Firebase.firestore.collection("lessonPlans").get().await()
+                _lessonPlans.value = querySnapshot.documents.mapNotNull { it.toLessonPlan() }
             } catch (e: Exception) {
                 Log.e("PlannerViewModel", "Error getting lesson plans", e)
                 // Handle error
@@ -95,14 +88,35 @@ class PlannerViewModel : ViewModel() {
         }
     }
 
-    private fun DocumentSnapshot.toLessonPlan(): LessonPlan {
-        return LessonPlan(
-            id = id,
-            title = getString("title") ?: "",
-            level = getString("level") ?: "",
-            topic = getString("topic") ?: "",
-            description = getString("description") ?: "",
-            content = getString("content") ?: ""
-        )
+    fun DocumentSnapshot.toLessonPlan(): LessonPlan? {
+        return try {
+            this.toObject(LessonPlan::class.java)
+        } catch (e: Exception) {
+            Log.e("DocumentSnapshot", "Error converting to LessonPlan", e)
+            null
+        }
+    }
+
+    private val _lessonPlan = mutableStateOf<LessonPlan?>(null)
+    val lessonPlan: State<LessonPlan?> = _lessonPlan
+
+    fun fetchLessonPlanById(lessonPlanId: String) {
+        viewModelScope.launch {
+            try {
+                Log.d("PlannerViewModel", "Fetching lesson plan with ID: $lessonPlanId")
+                val documentSnapshot = Firebase.firestore.collection("lessonPlans").document(lessonPlanId).get().await()
+                _lessonPlan.value = if (documentSnapshot.exists()) {
+                    documentSnapshot.toObject(LessonPlan::class.java)
+                } else {
+                    null // Or handle the case where the document doesn't exist
+                }
+                Log.d("PlannerViewModel", "Lesson plan fetched: ${_lessonPlan.value}")
+                Log.d("PlannerViewModel", "Lesson plan fetched: ${_lessonPlan.value?.content}")
+            } catch (e: Exception) {
+                // Handle exceptions (e.g., log the error or show an error message)
+                Log.e("PlannerViewModel", "Error fetching lesson plan", e) // Using Timber for logging
+                _lessonPlan.value = null // Or handle the error state in your UI
+            }
+        }
     }
 }

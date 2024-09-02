@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,11 +19,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -30,6 +36,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,67 +60,61 @@ import androidx.compose.runtime.mutableStateListOf
 import kotlinx.coroutines.delay
 import timber.log.Timber
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TakeAttendanceScreen(viewModel: AttendanceViewModel, groupId: String, navController: NavHostController) {
     val group = viewModel.groups.find { it.id == groupId }
     val groupName = group?.name ?: ""
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Take Attendance for $groupName",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        // Partial boxes
-        for (partial in 1..3) {
-            PartialBox(
-                partial = partial,
-                onAttendanceClick = {
-                    navController.navigate("attendance/$groupId/$partial")
-                },
-                onCheckClick = {
-                    navController.navigate("check/$groupId/$partial")
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Take Attendance for $groupName") })
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.padding(paddingValues)) {
+            LazyColumn {
+                items(3) { partial ->
+                    PartialCard(
+                        partial = partial + 1,
+                        groupName = groupName,
+                        onAttendanceClick = {
+                            navController.navigate("attendance/$groupId/${partial + 1}")
+                        },
+                        onCheckClick = {
+                            navController.navigate("check/$groupId/${partial + 1}")
+                        }
+                    )
                 }
-            )
+            }
         }
     }
 }
 
 @Composable
-fun PartialBox(partial: Int, onAttendanceClick: () -> Unit, onCheckClick: () -> Unit) {
-    Box(
+fun PartialCard(
+    partial: Int,
+    groupName: String,
+    onAttendanceClick: () -> Unit,
+    onCheckClick: () -> Unit
+) {
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
-            .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+            .clickable { onAttendanceClick() } // Assuming onAttendanceClick is the primary action
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(text = "Partial $partial")
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.SpaceAround
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(onClick = onAttendanceClick) {
-                    Text("Attendance")
-                }
+                Text(text = "Partial $partial", style = MaterialTheme.typography.headlineSmall)
                 Button(onClick = onCheckClick) {
-                    Text("Check")
+                    Text("Check Attendance")
                 }
             }
+            Text(text = groupName, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -303,89 +304,90 @@ fun StudentItem(
 ) {
     var selectedStatus by remember { mutableStateOf(status) }
 
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
-            .border(1.dp, Color.LightGray, RoundedCornerShape(4.dp))
     ) {
-        Text(text = student, modifier = Modifier.padding(8.dp))
+        Column(modifier = Modifier.padding(8.dp)) {
+            Text(text = student, modifier = Modifier.padding(8.dp))
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    color = when (selectedStatus) {
-                        AttendanceStatus.PRESENT -> Color.Green
-                        AttendanceStatus.LATE -> Color.Yellow
-                        AttendanceStatus.ABSENT -> Color.Red
-                        else -> Color.Transparent
-                    }
-                )
-                .padding(8.dp)
-        ) {
-            if (selectedStatus == null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceAround
-                ) {
-                    AttendanceOption(
-                        AttendanceStatus.PRESENT,
-                        Color.Green,
-                        painterResource(id = R.drawable.present_icon),
-                        {
-                            selectedStatus = AttendanceStatus.PRESENT
-                            onAttendanceStatusChange(AttendanceStatus.PRESENT)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = when (selectedStatus) {
+                            AttendanceStatus.PRESENT -> Color.Green
+                            AttendanceStatus.LATE -> Color.Yellow
+                            AttendanceStatus.ABSENT -> Color.Red
+                            else -> Color.Transparent
                         }
                     )
-                    AttendanceOption(
-                        AttendanceStatus.LATE,
-                        Color.Yellow,
-                        painterResource(id = R.drawable.late_icon),
-                        {
-                            selectedStatus = AttendanceStatus.LATE
-                            onAttendanceStatusChange(AttendanceStatus.LATE)
-                        }
-                    )
-                    AttendanceOption(
-                        AttendanceStatus.ABSENT,
-                        Color.Red,
-                        painterResource(id = R.drawable.absent_icon),
-                        {
-                            selectedStatus = AttendanceStatus.ABSENT
-                            onAttendanceStatusChange(AttendanceStatus.ABSENT)
-                        }
-                    )
-                }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (selectedStatus != null) {
-                        Image(
-                            painter = when (selectedStatus!!) {
-                                AttendanceStatus.PRESENT -> painterResource(id = R.drawable.present_icon)
-                                AttendanceStatus.LATE -> painterResource(id = R.drawable.late_icon)
-                                AttendanceStatus.ABSENT -> painterResource(id = R.drawable.absent_icon)
-                            },
-                            contentDescription = null,
-                            modifier = Modifier.size(30.dp)
+                    .padding(8.dp)
+            ) {
+                if (selectedStatus == null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        AttendanceOption(
+                            AttendanceStatus.PRESENT,
+                            Color.Green,
+                            painterResource(id = R.drawable.present_icon),
+                            {
+                                selectedStatus = AttendanceStatus.PRESENT
+                                onAttendanceStatusChange(AttendanceStatus.PRESENT)
+                            }
                         )
-                    } else {
-                        Text(text = "Pending")
+                        AttendanceOption(
+                            AttendanceStatus.LATE,
+                            Color.Yellow,
+                            painterResource(id = R.drawable.late_icon),
+                            {
+                                selectedStatus = AttendanceStatus.LATE
+                                onAttendanceStatusChange(AttendanceStatus.LATE)
+                            }
+                        )
+                        AttendanceOption(
+                            AttendanceStatus.ABSENT,
+                            Color.Red,
+                            painterResource(id = R.drawable.absent_icon),
+                            {
+                                selectedStatus = AttendanceStatus.ABSENT
+                                onAttendanceStatusChange(AttendanceStatus.ABSENT)
+                            }
+                        )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = when (selectedStatus) {
-                            AttendanceStatus.PRESENT -> "Present"
-                            AttendanceStatus.LATE -> "Late"
-                            AttendanceStatus.ABSENT -> "Absent"
-                            else -> ""
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (selectedStatus != null) {
+                            Image(
+                                painter = when (selectedStatus!!) {
+                                    AttendanceStatus.PRESENT -> painterResource(id = R.drawable.present_icon)
+                                    AttendanceStatus.LATE -> painterResource(id = R.drawable.late_icon)
+                                    AttendanceStatus.ABSENT -> painterResource(id = R.drawable.absent_icon)
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(30.dp)
+                            )
+                        } else {
+                            Text(text = "Pending")
                         }
-                    )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when (selectedStatus) {
+                                AttendanceStatus.PRESENT -> "Present"
+                                AttendanceStatus.LATE -> "Late"
+                                AttendanceStatus.ABSENT -> "Absent"
+                                else -> ""
+                            }
+                        )
+                    }
                 }
             }
         }

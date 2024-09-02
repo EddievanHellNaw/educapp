@@ -98,70 +98,6 @@ fun CheckScreen(
     }
 }
 
-@Composable
-fun AttendanceSummary(
-    attendanceRecords: List<AttendanceRecord>,
-    onEditClick: (AttendanceRecord) -> Unit,
-    currentPartial: Int
-) {
-    val attendanceSummary = attendanceRecords.groupBy { it.student }
-        .mapValues { (_, records) ->
-            records.groupingBy { it.status }.eachCount()
-        }
-
-    LazyColumn {
-        items(attendanceSummary.entries.toList()) { (student, summary) ->
-            var expanded by remember { mutableStateOf(false) }
-            val absentCount = summary[AttendanceStatus.ABSENT] ?: 0
-            val presentCount = summary[AttendanceStatus.PRESENT] ?: 0
-            val lateCount = summary[AttendanceStatus.LATE] ?: 0
-            val textColor = if (absentCount >= 6) Color.Red else Color.Black
-            val boxColor = if (absentCount >= 6) Color.Red.copy(alpha = 0.1f) else Color.Transparent
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
-                    .background(boxColor)
-                    .clickable { expanded = !expanded }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Student: $student", color = textColor)
-                    Text(
-                        text = "A: $absentCount, P: $presentCount, L: $lateCount",
-                        color = textColor
-                    )
-                }
-
-                if (expanded) {
-                    val studentRecords = attendanceRecords.filter { it.student == student }
-                    DetailedAttendanceView(studentRecords, currentPartial, onEditClick)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun StudentItem(student: String, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp)
-            .border(1.dp, Color.LightGray, RoundedCornerShape(4.dp))
-            .clickable { onClick() }
-    ) {
-        Text(text = student, modifier = Modifier.padding(8.dp))
-    }
-}
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DatePickerView(selectedDate: LocalDate, onDateChange: (LocalDate) -> Unit) {
@@ -337,6 +273,55 @@ fun EditAttendanceView(
 }
 
 @Composable
+fun AttendanceSummary(
+    attendanceRecords: List<AttendanceRecord>,
+    onEditClick: (AttendanceRecord) -> Unit,
+    currentPartial: Int
+) {
+    val attendanceSummary = attendanceRecords.groupBy { it.student }
+        .mapValues { (_, records) ->
+            records.groupingBy { it.status }.eachCount()
+        }
+
+    LazyColumn {
+        items(attendanceSummary.entries.toList()) { (student, summary) ->
+            var expanded by remember { mutableStateOf(false) }
+            val absentCount = summary[AttendanceStatus.ABSENT] ?: 0
+            val presentCount = summary[AttendanceStatus.PRESENT] ?: 0
+            val lateCount = summary[AttendanceStatus.LATE] ?: 0
+            val textColor = if (absentCount >= 6) Color.Red else Color.Black
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+                    .clickable { expanded = !expanded }
+            ) {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "Student: $student", color = textColor)
+                        Text(
+                            text = "A: $absentCount, P: $presentCount, L: $lateCount",
+                            color = textColor
+                        )
+                    }
+
+                    if (expanded) {
+                        val studentRecords = attendanceRecords.filter { it.student == student }
+                        DetailedAttendanceView(studentRecords, currentPartial, onEditClick)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun DetailedAttendanceView(
     records: List<AttendanceRecord>,
     currentPartial: Int,
@@ -344,33 +329,38 @@ fun DetailedAttendanceView(
 ) {
     val filteredRecords = records.filter { it.partial == currentPartial }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column {
         filteredRecords.forEach { record ->
             val textColor = if (record.status == AttendanceStatus.ABSENT) Color.Red else Color.Black
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+            Card(modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
             ) {
-                Text(text = record.date.toString(), color = textColor)
-                Text(text = record.status.toString(), color = textColor)
-                var expanded by remember { mutableStateOf(false) }
-                IconButton(onClick = { expanded = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    DropdownMenuItem(onClick = {
-                        onEditClick(record)
-                        expanded = false
-                    },
-                        text = { Text("Edit") }
-                    )
+                    Text(text = record.date.toString(), color = textColor)
+                    Text(text = record.status.toString(), color = textColor)
+                    var expanded by remember { mutableStateOf(false) }
+                    IconButton(onClick = { expanded = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        DropdownMenuItem(onClick = {
+                            onEditClick(record)
+                            expanded = false
+                        },
+                            text = { Text("Edit") }
+                        )
                     }
                 }
             }
         }
     }
+}

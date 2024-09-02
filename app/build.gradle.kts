@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.firebase.dynamic.links.ktx)
     implementation(libs.androidx.tv.material)
     implementation(libs.androidx.material3.android)
+    implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -84,4 +85,5 @@ dependencies {
     implementation("com.squareup:javapoet:1.11.0")
     implementation("io.insert-koin:koin-android:3.4.3")
     implementation("io.insert-koin:koin-androidx-compose:3.4.3")
+    implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
 }
