@@ -1,6 +1,7 @@
 package com.example.educapp.ui.ui
 
 import android.app.Application
+import android.webkit.WebView
 import com.google.firebase.FirebaseApp
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -15,6 +16,7 @@ class MyApplication : Application() {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
+        WebView.setWebContentsDebuggingEnabled(true)
         Timber.d("Timber is initialized")
         startKoin {
             androidLogger()

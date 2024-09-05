@@ -86,4 +86,6 @@ dependencies {
     implementation("io.insert-koin:koin-android:3.4.3")
     implementation("io.insert-koin:koin-androidx-compose:3.4.3")
     implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
+    implementation("org.jsoup:jsoup:1.18.1")
+    implementation("org.apache.commons:commons-text:1.10.0")
 }

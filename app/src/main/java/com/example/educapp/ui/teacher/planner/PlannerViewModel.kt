@@ -1,7 +1,7 @@
 package com.example.educapp.ui.teacher.planner
 
 import android.util.Log
-import androidx.compose.animation.core.copy
+import org.jsoup.safety.Safelist
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,34 +14,43 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.runtime.State
+import org.jsoup.Jsoup
 import timber.log.Timber
 
 data class LessonPlan(
-    val id: String = "", // Document ID in Firestore
+    val id: String = "",
     val title: String = "",
     val level: String = "",
     val topic: String = "",
     val description: String = "",
-    val content: String = "" // Can be HTML or rich text
+    val content: String  = ""
 )
 
 class PlannerViewModel : ViewModel() {
     private val _lessonPlans = MutableStateFlow<List<LessonPlan>>(emptyList())
     val lessonPlans: StateFlow<List<LessonPlan>> = _lessonPlans.asStateFlow()
 
-    fun saveLessonPlan(lessonPlan: LessonPlan) {
+    fun saveLessonPlan(lessonPlan: LessonPlan, onComplete: (Boolean) -> Unit) {
         viewModelScope.launch {
             val db = Firebase.firestore
             try {
+                Log.d("PlannerViewModel", "Saving lesson plan...")
+                val sanitizedContent = sanitizeHtml(lessonPlan.content)
                 val newLessonRef = db.collection("lessonPlans").document()
-                val newLesson = lessonPlan.copy(id = newLessonRef.id)
+                val newLesson = lessonPlan.copy(id = newLessonRef.id, content = sanitizedContent)
                 newLessonRef.set(newLesson).await()
                 _lessonPlans.value = _lessonPlans.value + newLesson
+                Log.d("PlannerViewModel", "Lesson plan saved successfully!")
+                onComplete(true)
             } catch (e: Exception) {
                 Log.e("PlannerViewModel", "Error saving lesson plan", e)
-                // Handle error (e.g., show a Snackbar)
+                onComplete(false)
             }
         }
+    }
+
+    private fun sanitizeHtml(content: String): String {
+        return Jsoup.clean(content, Safelist.basic())
     }
 
     fun getLessonPlans() {

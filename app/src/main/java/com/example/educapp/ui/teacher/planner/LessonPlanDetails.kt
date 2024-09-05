@@ -2,13 +2,14 @@ package com.example.educapp.ui.teacher.planner
 
 import android.util.Log
 import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.activity.result.launch
+import org.apache.commons.text.StringEscapeUtils
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 
@@ -56,22 +58,37 @@ fun LessonPlanDetailsScreen(lessonPlanId: String, viewModel: PlannerViewModel, n
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
             lessonPlan?.let {
-                Text(it.title, style = MaterialTheme.typography.headlineMedium)
-                Text("Level: ${it.level}", style = MaterialTheme.typography.bodyMedium)
-                Text("Topic: ${it.topic}", style = MaterialTheme.typography.bodyMedium)
-                Text("Description: ${it.description}", style = MaterialTheme.typography.bodyMedium)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ){
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(it.title, style = MaterialTheme.typography.headlineMedium)
+                        Text("Level: ${it.level}", style = MaterialTheme.typography.bodyMedium)
+                        Text("Topic: ${it.topic}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
 
-                AndroidView(
-                    factory = { context ->
-                        WebView(context).apply {
-                            settings.javaScriptEnabled = true
-                                    val htmlContent = "<html><head><style>body{font-size:16px;}</style></head><body>${it.content}</body></html>"
-                                    loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
-                                    quillEditor = this
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize() // Ensure the WebView fills the available space
-                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ){
+                    AndroidView(
+                        factory = { context ->
+                            WebView(context).apply {
+                                settings.javaScriptEnabled = true
+                                val unescapedContent = StringEscapeUtils.unescapeJava(it.content)
+                                loadDataWithBaseURL(null, unescapedContent, "text/html", "UTF-8", null)
+                                quillEditor = this
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
