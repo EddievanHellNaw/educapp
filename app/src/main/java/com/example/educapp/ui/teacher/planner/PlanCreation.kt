@@ -49,7 +49,7 @@ object AndroidView {
     lateinit var onEditorChange: EditorChangeCallback
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewPlanScreen(navController: NavController, viewModel: PlannerViewModel, onContentChange: (String)-> Unit) {
 

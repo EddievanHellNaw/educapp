@@ -4,6 +4,7 @@ import android.util.Log
 import android.webkit.WebView
 import org.apache.commons.text.StringEscapeUtils
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -29,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
+import org.jsoup.Jsoup
+import java.net.URLEncoder
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,12 +84,19 @@ fun LessonPlanDetailsScreen(lessonPlanId: String, viewModel: PlannerViewModel, n
                         factory = { context ->
                             WebView(context).apply {
                                 settings.javaScriptEnabled = true
-                                val unescapedContent = StringEscapeUtils.unescapeJava(it.content)
-                                loadDataWithBaseURL(null, unescapedContent, "text/html", "UTF-8", null)
+                                setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
+                                Log.d("LessonPlanDetailsScreen", "Content before loading: ${it.content}")
+
+                                val doc = Jsoup.parse(StringEscapeUtils.unescapeJava(it.content))
+                                Log.d("LessonPlanDetailsScreen", "doc content: $doc")
+                                val cleanedContent = doc.html()
+                                Log.d("LessonPlanDetailsScreen", "cleanedContent content: $cleanedContent")
+                                val dataUri = "data:text/html;charset=utf-8" + URLEncoder.encode(cleanedContent, "utf-8")
+                                loadUrl(dataUri)
                                 quillEditor = this
                             }
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
