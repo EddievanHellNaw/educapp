@@ -1,9 +1,9 @@
 package com.example.educapp.ui.teacher.planner
 
 import android.util.Log
+import android.view.LayoutInflater
 import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.activity.result.launch
+import androidx.appcompat.widget.Toolbar
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -37,7 +37,11 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import androidx.constraintlayout.compose.ChainStyle
+import androidx.core.view.setPadding
+import com.example.educapp.R
 import kotlinx.coroutines.launch
+import jp.wasabeef.richeditor.RichEditor
+
 
 // Interface for the editor change callback
 interface EditorChangeCallback {
@@ -83,8 +87,8 @@ fun NewPlanScreen(navController: NavController, viewModel: PlannerViewModel, onC
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            val (titleRef, levelRef, topicRef, descriptionRef, editorRef) = createRefs()
-            createVerticalChain(titleRef, levelRef, topicRef, descriptionRef, editorRef, chainStyle = ChainStyle.Packed)
+            val (titleRef, levelRef, topicRef, descriptionRef, editorRef, toolbarRef) = createRefs()
+            createVerticalChain(titleRef, levelRef, topicRef, descriptionRef, editorRef, toolbarRef, chainStyle = ChainStyle.Packed)
 
             OutlinedTextField(
                 value = title,
@@ -134,93 +138,45 @@ fun NewPlanScreen(navController: NavController, viewModel: PlannerViewModel, onC
                         end.linkTo(parent.end)
                     }
             )
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .constrainAs(editorRef) {
-                        top.linkTo(descriptionRef.bottom)
-                        start.linkTo(parent.start)
-                        end.linkTo(parent.end)
-                        bottom.linkTo(parent.bottom)
-                        width = Dimension.fillToConstraints
-                        height = Dimension.fillToConstraints
-                    },
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
+
+                var richEditor by remember { mutableStateOf<RichEditor?>(null) }
+
                 AndroidView(
                     factory = { context ->
-                        WebView(context).apply {
-                            settings.javaScriptEnabled = true
-                            addJavascriptInterface(WebAppInterface(context, onContentChange), "Android")
-                            webViewClient = object : WebViewClient() {
-                                override fun onPageFinished(view: WebView, url: String) {
-                                    super.onPageFinished(view, url)
-                                    quillEditor = view
-                                    quillEditor?.let {
-                                        try {
-                                            it.evaluateJavascript(
-                                                """
-                                                    quill.on('editor-change', function() {
-                                                        Android.onEditorChange(quill.root.innerHTML);
-                                                    });
-                                                """.trimIndent(),
-                                                null
-                                            )
-                                            Log.d("NewPlanScreen", "WebView page finished loading")
-                                        } catch (e: Exception) {
-                                            Log.e("NewPlanScreen", "Error evaluating JavaScript", e)
-                                        }
-                                    }
-                                }
-                            }
-                            loadDataWithBaseURL(
-                                null,
-                                """
-                            <html>
-                            <head>
-                               <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet"> 
-                               <style>
-                                    #editor > div.ql-editor {
-                                      overflow-y: visible;
-                                      -webkit-user-select: none;
-                                      -khtml-user-select: none;
-                                      -moz-user-select: none;
-                                      -o-user-select: none;
-                                      user-select: none;
-                                    }
-                               </style>
-                            </head>
-                            <body>
-                                                                
-                               <div id="editor">
-                                      
-                               </div>
-                               <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
-                                <script>
-                                  const quill = new Quill('#editor', {
-                                    placeholder: 'Write your lesson plan here...',
-                                    theme: 'snow',
-                                  });
-                                </script>
-                            </body>
-                            </html>
-                            """.trimIndent(),
-                                "text/html",
-                                "UTF-8",
-                                null
-                            )
+                        RichEditor(context).apply {
+                            setEditorFontSize(16)
+                            setEditorFontColor(android.graphics.Color.BLACK)
+                            setEditorBackgroundColor(android.graphics.Color.WHITE)
+                            setPadding(10, 10, 10, 10)
+                            setPlaceholder("Write your lesson plan here...")
+                            setOnTextChangeListener { text -> content = text }
+                            richEditor = this
                         }
                     },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .constrainAs(editorRef) {
+                            top.linkTo(descriptionRef.bottom)
+                            start.linkTo(parent.start)
+                            end.linkTo(parent.end)
+                        }
                 )
-                AndroidView.onEditorChange = object : EditorChangeCallback {
-                    override fun onEditorChange(newContent: String) {
-                        onContentChange(newContent)
-                    }
-                }
-            }
 
+                AndroidView(
+                    factory = { context ->
+                        Toolbar(context)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .constrainAs(toolbarRef) {
+                            top.linkTo(editorRef.bottom)
+                            start.linkTo(parent.start)
+                            end.linkTo(parent.end)
+                        },
+                    update = { toolbar ->
+                        richEditor?.setEditorToolbar(toolbar)
+                    }
+                )
 
             if (showConfirmationDialog) {
                 var isLoading by remember { mutableStateOf(false) }
@@ -234,42 +190,29 @@ fun NewPlanScreen(navController: NavController, viewModel: PlannerViewModel, onC
                             onClick = {
                                 coroutineScope.launch {
                                     isLoading = true
-                                    Log.d("NewPlanScreen", "Content value is: $content")
-                                    quillEditor?.evaluateJavascript(
-                                        "(function() { return quill.root.innerHTML; })();",
-
-                                    ) { value ->
-                                        Log.d("NewPlanScreen", "evaluateJavascript callback called")
-                                        if (value != null) {
-                                            content = value.removeSurrounding("\"")
-                                            val lessonPlan = LessonPlan(
-                                                title = title,
-                                                level = level,
-                                                topic = topic,
-                                                description = description,
-                                                content = content
-                                            )
-                                            Log.d("NewPlanScreen", "Lesson plan content before saving: $content")
-                                            viewModel.saveLessonPlan(lessonPlan) { success ->
-                                                Log.d(
-                                                    "NewPlanScreen",
-                                                    "Save callback called with success: $success"
-                                                )
-                                                isLoading = false
-                                                if (success) {
-                                                    showConfirmationDialog = false
-                                                    navController.popBackStack()
-                                                } else {
-                                                    // Handle error (e.g., show a Snackbar)
-                                                }
-                                            }
+                                    val lessonPlan = LessonPlan(
+                                        title = title,
+                                        level = level,
+                                        topic = topic,
+                                        description = description,
+                                        content = content
+                                    )
+                                    Log.d("NewPlanScreen", "Lesson plan content before saving: $content")
+                                    viewModel.saveLessonPlan(lessonPlan) { success ->
+                                        Log.d(
+                                            "NewPlanScreen",
+                                            "Save callback called with success: $success"
+                                        )
+                                        isLoading = false
+                                        if (success) {
+                                            showConfirmationDialog = false
+                                            navController.popBackStack()
                                         } else {
-                                            isLoading = false
-                                            // Handle error (e.g., show a Snackbar)
+                                            // Handle error
                                         }
                                     }
                                 }
-                                },
+                            },
                             enabled = !isLoading,
                             modifier = Modifier.width(150.dp)
                         ) {

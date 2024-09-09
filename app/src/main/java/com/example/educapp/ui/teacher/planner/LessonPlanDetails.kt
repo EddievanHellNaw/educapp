@@ -86,13 +86,8 @@ fun LessonPlanDetailsScreen(lessonPlanId: String, viewModel: PlannerViewModel, n
                                 settings.javaScriptEnabled = true
                                 setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
                                 Log.d("LessonPlanDetailsScreen", "Content before loading: ${it.content}")
-
-                                val doc = Jsoup.parse(StringEscapeUtils.unescapeJava(it.content))
-                                Log.d("LessonPlanDetailsScreen", "doc content: $doc")
-                                val cleanedContent = doc.html()
-                                Log.d("LessonPlanDetailsScreen", "cleanedContent content: $cleanedContent")
-                                val dataUri = "data:text/html;charset=utf-8" + URLEncoder.encode(cleanedContent, "utf-8")
-                                loadUrl(dataUri)
+                                val htmlContent = "<html><body>${it.content}</body></html>"
+                                loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
                                 quillEditor = this
                             }
                         },

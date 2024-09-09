@@ -88,4 +88,5 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
     implementation("org.jsoup:jsoup:1.18.1")
     implementation("org.apache.commons:commons-text:1.10.0")
+    implementation ("jp.wasabeef:richeditor-android:2.0.0")
 }
