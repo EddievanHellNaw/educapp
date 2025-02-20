@@ -26,10 +26,8 @@ import com.example.educapp.ui.teacher.attendance.AttendanceViewModel
 import com.example.educapp.ui.teacher.attendance.CheckScreen
 import com.example.educapp.ui.teacher.attendance.TakeAttendanceDetailsScreen
 import com.example.educapp.ui.teacher.attendance.TakeAttendanceScreen
-import com.example.educapp.ui.teacher.planner.LessonPlanDetailsScreen
-import com.example.educapp.ui.teacher.planner.MainPlannerScreen
-import com.example.educapp.ui.teacher.planner.NewPlanScreen
-import com.example.educapp.ui.teacher.planner.PlannerViewModel
+import com.example.educapp.ui.teacher.assistant.MainAssistantScreen
+import com.example.myapp.teacher.assistant.AssistantViewModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import org.koin.androidx.compose.koinViewModel
@@ -128,15 +126,8 @@ fun MyApp(content: String, onContentChange: (String) -> Unit){
                 CheckScreen(viewModel, groupId, partial, navController)
             }
 
-            composable("teacher/planner") { val viewModel: PlannerViewModel = koinViewModel()
-                MainPlannerScreen(navController, viewModel) }
-            composable ("teacher/newPlan") { val viewModel: PlannerViewModel = koinViewModel()
-                NewPlanScreen(navController, viewModel, onContentChange)}
-            composable("teacher/lessonPlanDetails/{lessonPlanId}") { backStackEntry ->
-                val lessonPlanId = backStackEntry.arguments?.getString("lessonPlanId") ?: ""
-                val viewModel: PlannerViewModel = koinViewModel()
-                LessonPlanDetailsScreen(lessonPlanId, viewModel, navController)
-            }
+            composable("teacher/planner") { val viewModel: AssistantViewModel = koinViewModel()
+                MainAssistantScreen(navController, viewModel) }
 
         }
     }
