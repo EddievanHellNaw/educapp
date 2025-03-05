@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="com_google_android_gms_fonts_certs">
+        <!-- Use @null if you don't need a custom certificate,
+             or define your real certificate here. -->
+        <item>@null</item>
+    </string-array>
+</resources>

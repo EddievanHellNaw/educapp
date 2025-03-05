@@ -93,4 +93,18 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
     implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.14")
+    implementation("com.halilibo.compose-richtext:richtext-ui-material3:1.0.0-alpha02")
+    implementation("com.halilibo.compose-richtext:richtext-markdown:1.0.0-alpha02")
+    implementation("com.halilibo.compose-richtext:richtext-commonmark:1.0.0-alpha02")
+    implementation ("com.google.accompanist:accompanist-navigation-animation:0.36.0")
+    implementation ("androidx.work:work-runtime-ktx:2.8.1")
+    implementation ("androidx.compose.ui:ui-text-google-fonts:1.7.8")
+    implementation ("androidx.datastore:datastore-preferences:1.1.3")
+    implementation ("com.tom-roush:pdfbox-android:2.0.27.0")
+    implementation ("org.apache.commons:commons-io:1.3.2")
+    implementation ("org.apache.commons:commons-text:1.9")
+    implementation ("com.rmtheis:tess-two:9.1.0") // OCR for image-based text
+    implementation ("androidx.exifinterface:exifinterface:1.3.6")
+    implementation ("com.rmtheis:tess-two:9.1.0")
+    implementation ("androidx.exifinterface:exifinterface:1.3.6")
 }
