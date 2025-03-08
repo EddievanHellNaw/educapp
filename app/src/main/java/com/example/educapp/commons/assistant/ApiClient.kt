@@ -1,19 +1,27 @@
 package com.example.educapp.commons.assistant
 
+import com.example.educapp.commons.assistant.network.AssistantRepositoryImpl.GenerationRequest
+import com.example.educapp.commons.assistant.network.ChatCompletionRequest
+import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
+import okhttp3.ResponseBody
+import retrofit2.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.converter.scalars.ScalarsConverterFactory
+import retrofit2.http.Body
+import retrofit2.http.Header
+import retrofit2.http.POST
+import retrofit2.http.Streaming
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
-
-    private const val BASE_URL = "https://api.deepseek.com"  // or your actual domain
-
+    // Change to your Cloudflare worker URL
+    private const val BASE_URL = "https://fragrant-bar-6c1d.edmedina1990.workers.dev/"
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
@@ -24,32 +32,32 @@ object ApiClient {
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)
         .build()
-
-    // Build the Retrofit instance
+    // Update Retrofit instance
     private val retrofit: Retrofit = Retrofit.Builder()
         .baseUrl(BASE_URL)
         .client(okHttpClient)
-        .addConverterFactory(GsonConverterFactory.create())
+        .addConverterFactory(ScalarsConverterFactory.create())
+        .addConverterFactory(Json.asConverterFactory("application/json".toMediaType()))
         .build()
 
-    // Expose the API
-    val deepSeekApi: DeepSeekApi by lazy {
-        retrofit.create(DeepSeekApi::class.java)
-    }
-
-    fun streamChatCompletion(apiKey: String, requestBodyJson: String): Response? {
-        val requestBody = requestBodyJson.toRequestBody(
-            "application/json; charset=utf-8".toMediaType()
-        )
-        val httpRequest = Request.Builder()
-            .url("https://api.deepseek.com/chat/completions")
-            .header("Authorization", "Bearer $apiKey")
-            .post(requestBody)
-            .build()
-
-        // Execute synchronously. We'll parse line by line later.
-        return okHttpClient.newCall(httpRequest).execute()
+    // Add new Cloudflare service
+    val cloudflareService: CloudflareService by lazy {
+        retrofit.create(CloudflareService::class.java)
     }
 }
 
+// New interface for Cloudflare
+interface CloudflareService {
+    @POST("/")
+    suspend fun generateContent(
+        @Header("Authorization") authToken: String,
+        @Body request: GenerationRequest
+    ): DeepSeekResponse
 
+    @POST("/")
+    @Streaming
+    suspend fun streamChatCompletion(
+        @Header("Authorization") authToken: String,
+        @Body request: ChatCompletionRequest
+    ): Response<ResponseBody>
+}

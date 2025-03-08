@@ -4,8 +4,11 @@ import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -21,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.educapp.commons.ui.FrostedGlassTextField
 import com.example.educapp.commons.ui.HapticButton
@@ -60,25 +64,31 @@ fun LoginScreen(navController: NavController) {
                     )
                 }
             }
+            val buttonModifier = Modifier
+                .width(200.dp)
+                .height(48.dp)
 
             AnimatedVisibility(visible = loginState == LoginState.LoggingIn) {
                 HapticButton(onClick = {
                     viewModel.loginUser(usernameEmail, password) { success ->
                         loginSuccess = success
                     }
-                }) {
+                },modifier = buttonModifier
+                ){
                     Text("Login")
                 }
             }
 
             if (loginState == LoginState.Input) {
+                Spacer(modifier = Modifier.padding(8.dp))
                 HapticButton(onClick = {
                     if (usernameEmail.isNotBlank() && password.isNotBlank()) {
                         loginState = LoginState.LoggingIn
                     } else {
 
                     }
-                }) {
+                },modifier = buttonModifier
+                ){
                     Text("Next")
                 }
             }

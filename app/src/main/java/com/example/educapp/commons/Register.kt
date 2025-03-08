@@ -291,7 +291,9 @@ fun RegistrationScreen(navController: NavController) {
                                 registrationError = error
                             }
                         }
-                    },
+                    }, modifier = Modifier
+                        .width(200.dp)
+                        .height(48.dp),
                     enabled = viewModel.role != null && !viewModel.isLoading
                 ) {
                     Text(if (viewModel.isLoading) "Creating Account..." else "Complete Registration")
@@ -310,7 +312,9 @@ fun RegistrationScreen(navController: NavController) {
                         Log.d("Registration", "Moving to role selection")
                         registrationState = RegistrationState.RoleSelection
                     }
-                }) {
+                }, modifier = Modifier
+                    .width(200.dp)
+                    .height(48.dp)) {
                     Text("Next")
                 }
             }
@@ -395,6 +399,9 @@ fun RoleSelectionScreen(
         // Add confirmation button
         HapticButton(
             onClick = onRoleSelected,
+            modifier = Modifier
+                .width(200.dp)
+                .height(48.dp),
             enabled = viewModel.role != null
         ) {
             Text("Confirm Role")
@@ -431,6 +438,9 @@ fun EmailVerificationScreen(navController: NavController) {
 
             HapticButton(
                 onClick = { checking = true },
+                modifier = Modifier
+                    .width(200.dp)
+                    .height(48.dp),
                 enabled = !checking
             ) {
                 Text(if (checking) "Checking..." else "I've verified my email")

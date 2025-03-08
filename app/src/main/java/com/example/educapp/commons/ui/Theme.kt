@@ -14,8 +14,13 @@ import androidx.core.view.WindowCompat
 import android.content.Context
 import android.widget.CalendarView
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,26 +34,35 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.Dp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+
 
 // Dark theme color scheme
 val GhostColorScheme = darkColorScheme(
@@ -62,6 +76,8 @@ val GhostColorScheme = darkColorScheme(
     onSurface = PureWhite,
     onError = warning,
     error = error,
+    surfaceVariant = Color(0xFF404040),  // Slightly lighter than surface
+    surfaceTint = DeepPurple.copy(alpha = 0.08f)  // Subtle primary overlay
     // Optionally define tertiary, error, onError, etc.
 )
 
@@ -78,8 +94,12 @@ val CinnamoSpiralColorScheme = lightColorScheme(
     tertiary = softPink,
     onTertiary = DarkGray,
     error = error,
-    onError = warning
+    onError = warning,
+    surfaceVariant = OffBlack,  // 15% darker than BabyBlue
+    surfaceTint = hardPink.copy(alpha = 0.2f)
 )
+
+
 
 val ItalianPlumberColorScheme = darkColorScheme(
     primary = MarioRed,            // MarioRed = Color(0xFFEE1C25)
@@ -190,17 +210,38 @@ fun GradientCard(
         )
     ),
     shape: Shape = MaterialTheme.shapes.medium,
-    elevation: CardElevation = CardDefaults.cardElevation(
-        defaultElevation = 8.dp
-    ),
+    defaultElevation: Dp = 8.dp,
+    pressedElevation: Dp = 4.dp,
     content: @Composable () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val currentElevation by animateDpAsState(
+        targetValue = if (isPressed) pressedElevation else defaultElevation,
+        animationSpec = tween(200)
+    )
+
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .shadow(
+                elevation = currentElevation,
+                shape = shape,
+                ambientColor = MaterialTheme.colorScheme.outlineVariant,
+                spotColor = MaterialTheme.colorScheme.outline
+            )
+            .then(
+                if (onClick != null) {
+                    Modifier.hapticClickable(
+                        onClick = onClick
+                    )
+                } else {
+                    Modifier
+                }
+            ),
         shape = shape,
-        elevation = elevation
+        elevation = CardDefaults.cardElevation(0.dp) // Disable default elevation
     ) {
-        // Apply the gradient as the background
         Box(
             modifier = Modifier
                 .background(gradientBrush)
@@ -222,27 +263,64 @@ fun FrostedGlassTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val animatedElevation by animateDpAsState(
+        targetValue = if (isFocused) 12.dp else 6.dp,
+        animationSpec = tween(100)
+    )
+
     Box(
         modifier = modifier
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-            .padding(4.dp)
+            .shadow(
+                elevation = animatedElevation,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = MaterialTheme.colorScheme.onSurface,
+                spotColor = MaterialTheme.colorScheme.surfaceTint
+            )
+            .shadow(
+                elevation = animatedElevation,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = MaterialTheme.colorScheme.surfaceTint,
+                spotColor = MaterialTheme.colorScheme.secondary
+            )
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
     ) {
         TextField(
             value = value,
             onValueChange = onValueChange,
-            label = { Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium) },
+            label = {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
             visualTransformation = visualTransformation,
-            placeholder = placeholder,
+            placeholder = {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                    placeholder()
+                }
+            },
             trailingIcon = trailingIcon,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
             colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = MaterialTheme.colorScheme.primary
+                cursorColor = MaterialTheme.colorScheme.primary,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
             ),
-            keyboardOptions = keyboardOptions
+            keyboardOptions = keyboardOptions,
+            interactionSource = interactionSource,
+            shape = RoundedCornerShape(16.dp),
+            singleLine = true
         )
     }
 }
@@ -307,7 +385,7 @@ fun GradientDatePickerDialog(
                     onDateSelected(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate())
                 }
                 onDismiss()
-            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7F56DA))) {
+            }) {
                 Text("Confirm")
             }
         },

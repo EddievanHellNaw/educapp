@@ -109,43 +109,6 @@ fun CheckScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DatePickerView(selectedDate: LocalDate, onDateChange: (LocalDate) -> Unit) {
-    var showDatePicker by remember { mutableStateOf(false) }
-
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                HapticButton (onClick = {
-                    onDateChange(LocalDate.ofInstant(
-                        Instant.ofEpochMilli(datePickerState.selectedDateMillis!!),
-                        ZoneId.systemDefault()
-                    ))
-                    showDatePicker = false
-                }) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                HapticButton (onClick = { showDatePicker = false }) {
-                    Text("Cancel")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
-    HapticButton (onClick = { showDatePicker = true }) {
-        Text("Date: $selectedDate")
-    }
-}
-
 @Composable
 fun EditAttendanceView(
     record: AttendanceRecord,
@@ -234,7 +197,9 @@ fun EditAttendanceView(
         if (selectedStatus != null) {
             HapticButton (
                 onClick = { showConfirmationDialog = true },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .width(200.dp)
+                    .height(48.dp),
                 enabled = !isLoading
             ) {
                 if (isLoading) {
@@ -248,9 +213,13 @@ fun EditAttendanceView(
             }
         }
 
+        Spacer(modifier = Modifier.padding(8.dp))
+
         HapticButton (
             onClick = onDismiss,
             modifier = Modifier.fillMaxWidth()
+                .width(200.dp)
+                .height(48.dp),
         ) {
             Text("Cancel")
         }
@@ -267,12 +236,17 @@ fun EditAttendanceView(
                             showSnackbar("Attendance updated successfully!")
                         }
                         showConfirmationDialog = false
-                    }) {
+                    }, modifier = Modifier
+                        .width(200.dp)
+                        .height(48.dp)) {
                         Text("Confirm")
                     }
                 },
                 dismissButton = {
-                    HapticButton (onClick = { showConfirmationDialog = false }) {
+                    HapticButton (onClick = { showConfirmationDialog = false },
+                        modifier = Modifier
+                        .width(200.dp)
+                        .height(48.dp)) {
                         Text("Cancel")
                     }
                 }

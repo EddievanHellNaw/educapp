@@ -191,14 +191,18 @@ fun NewGroupDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     HapticButton(
-                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }
+                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                        modifier = Modifier.height(50.dp).width(100.dp)
                     ) {
-                        Text("Import PDF")
+                        Text("Import PDF",
+                            style = MaterialTheme.typography.labelMedium)
                     }
 
                     Row {
-                        HapticButton(onClick = onDismiss) {
-                            Text("Cancel")
+                        HapticButton(onClick = onDismiss,
+                            modifier = Modifier.height(50.dp).width(85.dp)) {
+                            Text("Cancel",
+                                style = MaterialTheme.typography.labelMedium)
                         }
                         Spacer(Modifier.width(8.dp))
                         HapticButton(
@@ -212,9 +216,11 @@ fun NewGroupDialog(
                                 viewModel.saveGroup(group, teacherId)
                                 onDismiss()
                             },
-                            enabled = groupName.isNotBlank() && students.isNotEmpty()
+                            enabled = groupName.isNotBlank() && students.isNotEmpty(),
+                            modifier = Modifier.height(50.dp).width(85.dp)
                         ) {
-                            Text("Save")
+                            Text("Save",
+                                style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }

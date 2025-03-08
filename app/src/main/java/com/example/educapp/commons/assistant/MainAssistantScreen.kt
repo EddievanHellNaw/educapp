@@ -6,7 +6,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,7 +32,10 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,9 +65,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import com.example.educapp.commons.RegistrationViewModel
 import com.example.educapp.commons.UserRole
+import com.example.educapp.commons.classwork.ClassworkActivity
+import com.example.educapp.commons.classwork.ClassworkViewModel
+import com.example.educapp.commons.ui.GradientCard
+import com.example.educapp.commons.ui.HapticButton
 import com.example.educapp.commons.ui.hapticClickable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -68,87 +80,48 @@ import org.koin.core.parameter.parametersOf
 @Composable
 fun AssistantScreen(
     navController: NavController,
-    registrationViewModel: RegistrationViewModel // or however you retrieve it
+    viewModel: AssistantViewModel
 ) {
-    // 1) Local states for the user role and loading
-    var userRole by remember { mutableStateOf<UserRole?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
+    val generatedActivities by viewModel.generatedActivities.collectAsState()
 
-    // 2) Call `getUserRole` once, store the result in Compose state
-    LaunchedEffect(Unit) {
-        registrationViewModel.getUserRole { fetchedRole ->
-            userRole = fetchedRole
-            isLoading = false
+    Box(modifier = Modifier.fillMaxSize()) {
+        MainAssistantContent(viewModel)
+
+        if (generatedActivities.isNotEmpty()) {
+            ActivityPreviewOverlay(
+                activities = generatedActivities,
+                onApprove = { viewModel.confirmActivities() },
+                onCancel = { viewModel.clearGeneratedActivities() }
+            )
         }
-    }
-
-    // 3) Show a spinner if still loading
-    if (isLoading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator()
-        }
-    } else {
-        // If no role was found, fallback to STUDENT or TEACHER
-        val finalRole = userRole ?: UserRole.STUDENT
-
-        // 4) Now we can create the AssistantViewModel with the role
-        val assistantViewModel: AssistantViewModel = koinViewModel(parameters = {
-            // If your Koin factory expects a String, pass finalRole.name:
-            parametersOf(finalRole.name)
-
-            // Or if your Koin factory has factory { (userRole: UserRole) -> ... }:
-            // parametersOf(finalRole)
-        })
-
-        // 5) Render your main assistant UI
-        MainAssistantScreen(navController, assistantViewModel)
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainAssistantScreen(
-    navController: NavController,
-    viewModel: AssistantViewModel
-) {
+private fun MainAssistantContent(viewModel: AssistantViewModel) {
+
+    val isResponding by viewModel.isResponding.collectAsState() // Add this line
+    val focusManager = LocalFocusManager.current // Add focus manage
     val messages by viewModel.messages.collectAsState()
     val listState = rememberLazyListState()
     var userInput by remember { mutableStateOf("") }
-    val focusManager = LocalFocusManager.current
-
-    // Suppose we have a boolean in the ViewModel indicating if the AI is responding
-    val isResponding by viewModel.isResponding.collectAsState() // e.g. a StateFlow<Boolean>
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 1) Messages list
+        ModelSelector(viewModel)
+
         LazyColumn(
             modifier = Modifier.weight(1f),
             state = listState
         ) {
             items(messages) { message ->
-                MessageBubble(message,isResponding)
+                MessageBubble(message, isResponding)
             }
         }
 
-        // Scroll to bottom when the messages list changes
-        LaunchedEffect(Unit) {
-            snapshotFlow { messages.lastOrNull() }
-                .collect {
-                    if (messages.isNotEmpty()) {
-                        listState.animateScrollToItem(messages.lastIndex)
-                    }
-                }
-        }
-
-
-        // 2) Our new ChatInputBar at the bottom
         ChatInputBar(
             userInput = userInput,
             onUserInputChange = { userInput = it },
@@ -164,6 +137,8 @@ fun MainAssistantScreen(
         )
     }
 }
+
+
 
 @Composable
 fun ChatInputBar(
@@ -370,3 +345,190 @@ fun AnimatedGradientText(text: String) {
         style = MaterialTheme.typography.bodySmall.copy(fontSize = 14.sp, brush = brush)
     )
 }
+
+@Composable
+fun ModelSelector(viewModel: AssistantViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedModel by viewModel.selectedModel.collectAsState()
+    val models = listOf(
+        ModelOption("deepseek-reasoner", "DeepSeek R1", "Good for problem solving and logical output"),
+        ModelOption("deepseek-chat", "DeepSeek V3", "Faster & Great for everyday tasks")
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        // Clickable surface to trigger dropdown
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier
+                .width(200.dp)
+                .hapticClickable { expanded = true }
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = models.first { it.id == selectedModel }.displayName,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    contentDescription = "Select model",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        // Dropdown menu
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(280.dp)
+        ) {
+            models.forEach { model ->
+                DropdownMenuItem(
+                    text = {
+                        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                            Text(
+                                text = model.displayName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = model.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    },
+                    onClick = {
+                        viewModel.selectModel(model.id)
+                        expanded = false
+                    },
+                    trailingIcon = {
+                        if (model.id == selectedModel) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ActivityPreviewOverlay(
+    activities: List<ClassworkActivity>,
+    onApprove: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.4f))
+            .clickable(onClick = onCancel),
+        contentAlignment = Alignment.Center
+    ) {
+        GradientCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .heightIn(max = 600.dp),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Review Generated Activities",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(activities) { activity ->
+                        ActivityPreviewItem(activity)
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    HapticButton(onClick = onCancel) {
+                        Text("Cancel")
+                    }
+
+                    HapticButton (onClick = onApprove) {
+                        Text("Approve & Save")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ActivityPreviewItem(activity: ClassworkActivity) {
+    GradientCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+        ) {
+            Text(
+                text = activity.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = activity.description,
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Materials section
+            if (activity.materials.isNotEmpty()) {
+                Text(
+                    text = "Materials Needed:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                activity.materials.forEach { material ->
+                    Text(
+                        text = "• $material",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+data class ModelOption(
+    val id: String,
+    val displayName: String,
+    val description: String
+)
+

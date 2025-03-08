@@ -15,24 +15,34 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
 import com.example.educapp.commons.annotation.AnnotationMainScreen
+import com.example.educapp.commons.annotation.BookAnnotationScreen
 import com.example.educapp.commons.auth.WelcomeScreen
 import com.example.educapp.commons.calendar.EventCreationScreen
 import com.example.educapp.commons.calendar.EventDetailsScreen
 import com.example.educapp.commons.student.StudentMainScreen
 import com.example.educapp.commons.teacher.TeacherMainScreen
 import com.example.educapp.commons.assistant.AssistantScreen
+import com.example.educapp.commons.assistant.network.AuthRepository
+import com.example.educapp.commons.classwork.ClassworkMainScreen
+import com.example.educapp.commons.classwork.ClassworkPartialScreen
+import com.example.educapp.commons.classwork.ClassworkViewModel
 import com.example.educapp.commons.teacher.attendance.AttendanceScreen
 import com.example.educapp.commons.teacher.attendance.AttendanceViewModel
 import com.example.educapp.commons.teacher.attendance.CheckScreen
@@ -45,11 +55,14 @@ import com.example.educapp.commons.teacher.grading.GradesMainScreen
 import com.example.educapp.commons.teacher.grading.GradesPartialScreen
 import com.example.educapp.commons.teacher.grading.GradesViewModel
 import com.example.educapp.commons.teacher.grading.TakeGradesScreen
+import com.example.educapp.commons.teacher.groups.GroupDashboardScreen
+import com.example.educapp.commons.teacher.groups.GroupsMainScreen
 import com.example.educapp.commons.teacher.settings.SettingsMainScreen
 import com.example.educapp.commons.teacher.settings.SettingsRepository
 import com.example.educapp.commons.teacher.settings.SettingsViewModel
 import com.example.educapp.commons.ui.AppTheme
 import com.example.educapp.commons.ui.MyAppTheme
+import com.example.myapp.teacher.assistant.AssistantViewModel
 import com.google.accompanist.navigation.animation.AnimatedNavHost
 import com.google.accompanist.navigation.animation.composable
 import com.google.accompanist.navigation.animation.rememberAnimatedNavController
@@ -57,7 +70,8 @@ import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import org.koin.androidx.compose.koinViewModel
-
+import org.koin.core.parameter.parametersOf
+import java.net.URLDecoder
 
 @SuppressLint("SetJavaScriptEnabled")
 class MainActivity : ComponentActivity() {
@@ -180,6 +194,35 @@ fun MyApp(
                 val eventRepository = EventRepository()
                 TeacherMainScreen(navController, teacherUsername, eventRepository)
                 }
+
+            composable ("teacher/groups") {
+                val teacherId = Firebase.auth.currentUser?.uid ?: ""
+                val viewModel: AttendanceViewModel = koinViewModel()
+                GroupsMainScreen(navController, viewModel, teacherId)
+            }
+
+            composable(
+                route = "teacher/group_dashboard/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+                // Get the actual group from your ViewModel's groups list.
+                val attendanceViewModel: AttendanceViewModel = koinViewModel()
+                // Now use the instance's groups property
+                val group = attendanceViewModel.groups.find { it.id == groupId }
+                if (group != null) {
+                    GroupDashboardScreen(
+                        navController = navController,
+                        group = group,
+                        attendanceViewModel = attendanceViewModel
+                    )
+                } else {
+                    // If group isn't found yet, show a loading or error state.
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Group not found. Please try again.")
+                    }
+                }
+            }
 
             composable("teacher/attendance") {
                 val viewModel: AttendanceViewModel = koinViewModel()
@@ -304,7 +347,40 @@ fun MyApp(
                 val viewModel: GradesViewModel = koinViewModel()
                 CheckGradesScreen(navController, viewModel, groupId, partial)
             }
+
+            // In your NavGraph definition
+            composable(
+                route = "classwork_partials/{groupId}",
+                arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+                val classworkViewModel: ClassworkViewModel = koinViewModel(parameters = { parametersOf(groupId) })
+                ClassworkPartialScreen(
+                    navController = navController,
+                    groupId = groupId,
+                    viewModel = classworkViewModel
+                )
+            }
         }
+
+        composable(
+            route = "assistant/{groupId}",
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            // Retrieve the groupId from arguments
+            val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+
+            // Fetch the user's role (replace with your logic)
+            val userRole = UserRole.TEACHER // Or fetch dynamically (e.g., from Firebase)
+
+            // Pass BOTH parameters to the ViewModel
+            val viewModel: AssistantViewModel = koinViewModel(
+                parameters = { parametersOf(userRole, groupId) }
+            )
+
+            AssistantScreen(navController, viewModel)
+        }
+
         navigation(startDestination = "student_main", route = "student") {
             composable("student_main") {  // ← Must be top-level
                 StudentMainScreen(navController)
@@ -315,10 +391,21 @@ fun MyApp(
             // AnnotationScreen is a composable implementing the PDF annotation feature.
             AnnotationMainScreen(navController)
         }
-        composable("assistant") {
-            val registrationViewModel: RegistrationViewModel = koinViewModel()
-            AssistantScreen(navController, registrationViewModel)
+        composable(
+            "annotation/{encodedOption}",
+            arguments = listOf(navArgument("encodedOption") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val decodedOption = URLDecoder.decode(
+                backStackEntry.arguments?.getString("encodedOption"),
+                "UTF-8"
+            )
+            BookAnnotationScreen(
+                navController = navController,
+                englishOption = decodedOption
+            )
         }
+
+
 
     }
 }

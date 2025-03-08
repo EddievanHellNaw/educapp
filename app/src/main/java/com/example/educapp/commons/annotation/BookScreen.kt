@@ -1,73 +1,96 @@
 package com.example.educapp.commons.annotation
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PaintingStyle.Companion.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
+import com.example.educapp.commons.ui.HapticButton
 
 @Composable
 fun BookAnnotationScreen(navController: NavHostController, englishOption: String) {
-    // Map the chosen option to an asset file name.
     val assetFileName = when (englishOption) {
-        "English 1" -> "english1.pdf"
-        "English 2" -> "english2.pdf"
-        "English 3" -> "english3.pdf"
-        "English 4" -> "english4.pdf"
-        "English 5" -> "english5.pdf"
+        "English 1" -> "books/english1.pdf"
+        "English 2" -> "books/english2.pdf"
+        "English 3" -> "books/english3.pdf"
+        "English 4" -> "books/english4.pdf"
+        "English 5" -> "books/english5.pdf"
         else -> "english1.pdf"
     }
 
+    val viewModel: PdfViewModel = viewModel(key = "pdf-$englishOption")
     val context = LocalContext.current
+    val pdfState by viewModel.pdfState
+    val loadingProgress by viewModel.loadingProgress
 
-    // Asynchronously load the PDF from assets using PDFBox
-    val pdfBitmap by produceState<Bitmap?>(initialValue = null, key1 = assetFileName) {
-        try {
-            // Load the PDF and render it
-            val bitmap = context.assets.open(assetFileName).use { inputStream ->
-                val document = com.tom_roush.pdfbox.pdmodel.PDDocument.load(inputStream)
-                val renderer = com.tom_roush.pdfbox.rendering.PDFRenderer(document)
-                val renderedBitmap = renderer.renderImage(0)
-                document.close()
-                renderedBitmap // Return bitmap from `use` block
-            }
-            value = bitmap // Assign OUTSIDE the nested lambda
-        } catch (e: Exception) {
-            e.printStackTrace()
-            value = null // Assign in case of error
-        }
+    LaunchedEffect(englishOption) {
+        viewModel.loadPdf(context, assetFileName)
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (val state = pdfState) {
+            is PdfViewModel.PdfState.Loading -> {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Loading PDF: ${loadingProgress}%")
+                }
+            }
 
-    if (pdfBitmap != null) {
-        // Display the PDF along with the scribble (drawing) overlay.
-        PdfAnnotationScreen(pdfBitmap = pdfBitmap!!)
-    } else {
-        // Display a loading indicator while the PDF loads.
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            is PdfViewModel.PdfState.Success -> {
+                PdfAnnotationScreen(pdfBitmap = state.bitmap)
+            }
+
+            is PdfViewModel.PdfState.Error -> {
+                Text(
+                    text = "Error: ${state.message}",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color.Red
+                )
+            }
+
+            is PdfViewModel.PdfState.Timeout -> {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Timeout loading PDF", color = Color.Red)
+                    HapticButton (onClick = { viewModel.loadPdf(context, assetFileName) }) {
+                        Text("Retry")
+                    }
+                }
+            }
         }
     }
 }

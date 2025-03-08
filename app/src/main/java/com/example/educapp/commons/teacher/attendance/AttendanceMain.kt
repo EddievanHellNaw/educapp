@@ -48,6 +48,7 @@ import com.example.educapp.commons.ui.FrostedBox
 import com.example.educapp.commons.ui.FrostedGlassTextField
 import com.example.educapp.commons.ui.GradientCard
 import com.example.educapp.commons.ui.HapticButton
+import com.example.educapp.commons.ui.HapticFloatingActionButton
 import com.example.educapp.commons.ui.hapticClickable
 import kotlin.text.isNotBlank
 
@@ -70,7 +71,12 @@ fun AttendanceScreen(viewModel: AttendanceViewModel, navController: NavHostContr
                 ) })
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showNewGroupDialog = true }) {
+            HapticFloatingActionButton(
+                onClick = { showNewGroupDialog = true },
+                modifier = Modifier
+                .size(75.dp) // Compact size
+                .padding(8.dp),
+            ){
                 Icon(Icons.Filled.Add, contentDescription = "New Group")
             }
         }

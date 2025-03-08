@@ -1,7 +1,6 @@
 package com.example.educapp.commons.calendar
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -136,8 +135,13 @@ fun EventDetailsScreen(
                                 navController.popBackStack()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
+                        baseColor = MaterialTheme.colorScheme.errorContainer,
+                        lightShadow = MaterialTheme.colorScheme.error,
+                        darkShadow = MaterialTheme.colorScheme.onErrorContainer,
+                        contentColor = MaterialTheme.colorScheme.onError,
+
+                        )
+                    {
                         Text("Delete")
                     }
                 }

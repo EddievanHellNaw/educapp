@@ -168,10 +168,6 @@ class GradesViewModel(
         }
     }
 
-
-
-
-
     fun computeStudentGradesForGroup(group: AttendanceGroup, records: List<AttendanceRecord>, partial: Int): List<StudentGrade> {
         return group.students.map { studentName ->
             val absenceCount = records.count { it.student == studentName && it.status == AttendanceStatus.ABSENT }

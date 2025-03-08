@@ -1,9 +1,6 @@
 package com.example.educapp.commons.annotation
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Box
+import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,18 +11,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import com.example.educapp.commons.ui.GradientCard
 import java.net.URLEncoder
@@ -50,22 +38,13 @@ fun AnnotationMainScreen(navController: NavHostController) {
                 .padding(16.dp)
         ) {
             Text(
-                text = "Select a PDF to annotate",
+                text = "Select a Book",
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
             // Use LazyColumn if you expect many items; here five items are fine in a Column.
             englishOptions.forEachIndexed { index, option ->
                 GradientCard(
-                    onClick = {
-                        navController.navigate("annotation/${URLEncoder.encode(option, "UTF-8")}")
-                    },
-                    gradientBrush = Brush.horizontalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surface,
-                            gradientColors[index]
-                        )
-                    ),
                     content = {
                         // Use your existing styling or customizations for the card's inner content.
                         Text(
@@ -74,7 +53,20 @@ fun AnnotationMainScreen(navController: NavHostController) {
                             color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.padding(16.dp).fillMaxWidth()
                         )
-                    }
+                    },
+                    onClick = {
+                        Log.d("AnnotationMainScreen", "Option clicked: $option")
+                        val encoded = URLEncoder.encode(option, "UTF-8")
+                        println("Attempting navigation to: annotation/$encoded")
+                        navController.navigate("annotation/$encoded")
+                    },
+                    gradientBrush = Brush.horizontalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surface,
+                            gradientColors[index]
+                        )
+                    )
+
                 )
 
                 Spacer(modifier = Modifier.padding(8.dp))

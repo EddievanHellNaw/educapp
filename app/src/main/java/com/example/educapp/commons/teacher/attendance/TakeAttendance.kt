@@ -1,6 +1,5 @@
 package com.example.educapp.commons.teacher.attendance
 
-import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -29,30 +31,34 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.example.educapp.R
-import java.time.LocalDate
-import kotlin.collections.find
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.ui.graphics.Brush
 import com.example.educapp.commons.ui.GradientCard
 import com.example.educapp.commons.ui.HapticButton
 import com.example.educapp.commons.ui.hapticClickable
 import kotlinx.coroutines.delay
 import timber.log.Timber
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlin.collections.find
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,7 +123,8 @@ fun PartialCard(
                 // Top row: partial text (left half), button (right half)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     // Partial text occupies left half
                     Text(
@@ -125,10 +132,11 @@ fun PartialCard(
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.weight(1f)
                     )
+
                     // HapticButton occupies right half
                     HapticButton(
                         onClick = onCheckClick,
-                        modifier = Modifier.weight(1f).fillMaxHeight()
+                        modifier = Modifier.weight(1f)
                     ) {
                         Text(text = "Review",style = MaterialTheme.typography.bodyMedium)
                     }
@@ -163,6 +171,7 @@ fun TakeAttendanceDetailsScreen(
     val attendanceList = remember { mutableStateListOf<AttendanceRecord>() }
     var allStudentsHaveRecord by remember { mutableStateOf(false) }
     var buttonText by remember { mutableStateOf("Confirm Attendance") }
+    var showDatePickerDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(key1 = students) {
         if (attendanceList.isEmpty()) {
@@ -205,7 +214,9 @@ fun TakeAttendanceDetailsScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(16.dp)
+                        .width(200.dp)
+                        .height(48.dp),
                     enabled = !isLoading
                 ) {
                     if (isLoading) {
@@ -221,31 +232,72 @@ fun TakeAttendanceDetailsScreen(
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
-            DatePickerView(selectedDate) { newDate ->
-                Log.d("TakeAttendanceDetailsScreen", "Selected date: $newDate")
-                selectedDate = newDate
-                attendanceList.clear()
-                students.forEach { student ->
-                    val existingRecord = attendanceRecords.find {
-                        it.student == student && it.date == selectedDate
-                    }
-                    if (existingRecord != null) {
-                        attendanceList.add(existingRecord)
-                    } else {
-                        attendanceList.add(
-                            AttendanceRecord(
-                                student = student,
-                                groupId = groupId,
-                                partial = partial,
-                                date = selectedDate
-                            )
-                        )
-                    }
-                }
-                allStudentsHaveRecord = attendanceList.all { it.status != null }
+            Spacer(modifier = Modifier.padding(8.dp))
+            HapticButton(
+                onClick = { showDatePickerDialog = true },
+                modifier = Modifier
+                    .width(200.dp)
+                    .height(48.dp)
+            ) {
+                Text(
+                    text="Select Date: ${selectedDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))}",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            if (showDatePickerDialog) {
+                val datePickerState = rememberDatePickerState(
+                    initialSelectedDateMillis = selectedDate.atStartOfDay(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+                )
+
+                DatePickerDialog(
+                    onDismissRequest = { showDatePickerDialog = false },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showDatePickerDialog = false
+                                datePickerState.selectedDateMillis?.let { millis ->
+                                    selectedDate = Instant.ofEpochMilli(millis)
+                                        .atZone(ZoneId.systemDefault())
+                                        .toLocalDate()
+
+                                    // Update attendance list
+                                    attendanceList.clear()
+                                    students.forEach { student ->
+                                        val existingRecord = attendanceRecords.find {
+                                            it.student == student && it.date == selectedDate
+                                        }
+                                        if (existingRecord != null) {
+                                            attendanceList.add(existingRecord)
+                                        } else {
+                                            attendanceList.add(
+                                                AttendanceRecord(
+                                                    student = student,
+                                                    groupId = groupId,
+                                                    partial = partial,
+                                                    date = selectedDate
+                                                )
+                                            )
+                                        }
+                                    }
+                                    allStudentsHaveRecord = attendanceList.all { it.status != null }
+                                }
+                            }
+                        ) {
+                            Text("OK")
+                        }
+                    }
+                ) {
+                    DatePicker(
+                        state = datePickerState,
+                        colors = DatePickerDefaults.colors() // Add default colors
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.padding(8.dp))
 
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(attendanceList) { record ->
@@ -279,7 +331,9 @@ fun TakeAttendanceDetailsScreen(
                                 showGoBackButton = true
                                 buttonText = "Go Back"
                                 showSnackbar = true
-                            }) {
+                            },modifier = Modifier
+                                .width(200.dp)
+                                .height(48.dp)) {
                                 Text("Confirm", style = MaterialTheme.typography.bodySmall)
                             }
                         } else {
@@ -287,13 +341,17 @@ fun TakeAttendanceDetailsScreen(
                                 navController.popBackStack()
                                 showConfirmationDialog = false
                                 showGoBackButton = false
-                            }) {
+                            },modifier = Modifier
+                                .width(200.dp)
+                                .height(48.dp)) {
                                 Text("Go Back",style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     },
                     dismissButton = {
-                        HapticButton(onClick = { showConfirmationDialog = false }) {
+                        HapticButton(onClick = { showConfirmationDialog = false },modifier = Modifier
+                            .width(200.dp)
+                            .height(48.dp)) {
                             Text("Cancel",style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -442,7 +500,6 @@ fun AttendanceOption(
         modifier = Modifier
             .padding(4.dp)
             .size(width = 90.dp, height = 70.dp), // Increased height for image and text
-        colors = ButtonDefaults.buttonColors(containerColor = if (isClicked) darkenColor(color) else color)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
@@ -455,7 +512,3 @@ fun AttendanceOption(
     }
 }
 
-
-fun darkenColor(color: Color): Color {
-    return color.copy(alpha = 0.8f)
-}

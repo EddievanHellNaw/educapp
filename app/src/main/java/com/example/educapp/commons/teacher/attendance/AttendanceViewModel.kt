@@ -7,6 +7,7 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.ViewModel
@@ -71,6 +72,9 @@ data class AttendanceUiState(
     val showImportSuccess: Boolean = false,
     val errorMessage: String? = null
 )
+
+
+
 
 class AttendanceViewModel (
     private val firestore: FirebaseFirestore
@@ -154,6 +158,10 @@ class AttendanceViewModel (
 
     private fun getCurrentTeacherId(): String {
         return Firebase.auth.currentUser?.uid ?: ""
+    }
+
+    fun getGroupById(groupId: String): Flow<AttendanceGroup?> = snapshotFlow {
+        _groups.find { it.id == groupId }
     }
 
     fun saveGroup(group: AttendanceGroup, teacherId: String) {
@@ -460,11 +468,13 @@ class AttendanceViewModel (
 
     private companion object {
         val STUDENT_LINE_PATTERN = Regex(
-            """(\d+)\s+(\d{7})\s+([A-Z][A-Z\s]+?)\s+(\d+)\s+(\d{7})\s+([A-Z][A-Z\s]+)"""
+            """(\d+)\s+(\d{7})\s+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)\s+(\d+)\s+(\d{7})\s+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+)""",
+            RegexOption.IGNORE_CASE
         )
 
         val SINGLE_STUDENT_PATTERN = Regex(
-            """^\d+\s+\d{7}\s+([A-Z][A-Z\s]+)"""
+            """^\d+\s+\d{7}\s+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+)""",
+            RegexOption.IGNORE_CASE
         )
     }
 
@@ -518,17 +528,27 @@ class AttendanceViewModel (
     private fun isValidStudentName(line: String): Boolean {
         return line.matches(Regex("""^(?!.*(FACULTAD|COORDINADOR|Página)) 
         [A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]{4,}${'$'}""", RegexOption.IGNORE_CASE)) &&
-                line.count { it.isLetter() } >= 3
+                line.count { it.isLetter() } >= 3 &&
+                line.contains(Regex("[A-ZÁÉÍÓÚÜÑ]"))
     }
 
     private fun cleanStudentName(raw: String): String {
         return raw.replace(Regex("""\s{2,}"""), " ")
             .trim()
+            .replace(Regex("""[^a-zA-ZÁÉÍÓÚÜÑáéíóúüñ\s]"""), "") // Remove invalid characters
             .split(" ")
             .joinToString(" ") { part ->
                 part.lowercase()
-                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                    .replaceFirstChar {
+                        when {
+                            it.isLowerCase() -> it.titlecase()
+                            it == 'ñ' -> "Ñ"
+                            else -> it.toString()
+                        }
+                    }
             }
+            .replace(Regex("""\b(Del?|La|Los|Las|Y|E)\b"""), "") // Remove articles
+            .trim()
     }
 
     private fun mapLevelToColor(levelLine: String): Int {
