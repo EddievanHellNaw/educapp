@@ -39,10 +39,7 @@ import com.example.educapp.commons.calendar.EventDetailsScreen
 import com.example.educapp.commons.student.StudentMainScreen
 import com.example.educapp.commons.teacher.TeacherMainScreen
 import com.example.educapp.commons.assistant.AssistantScreen
-import com.example.educapp.commons.assistant.network.AuthRepository
-import com.example.educapp.commons.classwork.ClassworkMainScreen
 import com.example.educapp.commons.classwork.ClassworkPartialScreen
-import com.example.educapp.commons.classwork.ClassworkViewModel
 import com.example.educapp.commons.teacher.attendance.AttendanceScreen
 import com.example.educapp.commons.teacher.attendance.AttendanceViewModel
 import com.example.educapp.commons.teacher.attendance.CheckScreen
@@ -62,7 +59,6 @@ import com.example.educapp.commons.teacher.settings.SettingsRepository
 import com.example.educapp.commons.teacher.settings.SettingsViewModel
 import com.example.educapp.commons.ui.AppTheme
 import com.example.educapp.commons.ui.MyAppTheme
-import com.example.myapp.teacher.assistant.AssistantViewModel
 import com.google.accompanist.navigation.animation.AnimatedNavHost
 import com.google.accompanist.navigation.animation.composable
 import com.google.accompanist.navigation.animation.rememberAnimatedNavController
@@ -349,36 +345,25 @@ fun MyApp(
             }
 
             // In your NavGraph definition
-            composable(
-                route = "classwork_partials/{groupId}",
-                arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-            ) { backStackEntry ->
+            composable("classwork/{groupId}") { backStackEntry ->
                 val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
-                val classworkViewModel: ClassworkViewModel = koinViewModel(parameters = { parametersOf(groupId) })
                 ClassworkPartialScreen(
                     navController = navController,
-                    groupId = groupId,
-                    viewModel = classworkViewModel
+                    groupId = groupId
                 )
             }
         }
 
-        composable(
-            route = "assistant/{groupId}",
-            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            // Retrieve the groupId from arguments
+        composable("assistant/{groupId}") { backStackEntry ->
             val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+            // Get userRole from your app's session/auth system
+            val userRole = remember { UserRole.TEACHER } // Replace with actual source
 
-            // Fetch the user's role (replace with your logic)
-            val userRole = UserRole.TEACHER // Or fetch dynamically (e.g., from Firebase)
-
-            // Pass BOTH parameters to the ViewModel
-            val viewModel: AssistantViewModel = koinViewModel(
-                parameters = { parametersOf(userRole, groupId) }
+            AssistantScreen(
+                navController = navController,
+                viewModel = koinViewModel(parameters = { parametersOf(userRole, groupId) }),
+                groupId = groupId
             )
-
-            AssistantScreen(navController, viewModel)
         }
 
         navigation(startDestination = "student_main", route = "student") {

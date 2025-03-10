@@ -1,16 +1,24 @@
 package com.example.educapp.commons.classwork
 
+import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import timber.log.Timber
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.UUID
 
 interface ClassworkRepository {
     // Partial Operations
     suspend fun getClassworkPartials(groupId: String): List<ClassworkPartial>
-    suspend fun createClassworkPartial(partial: ClassworkPartial)
+    fun getPartialsFlow(groupId: String): Flow<List<ClassworkPartial>>
+    suspend fun createClassworkPartial(partial: ClassworkPartial): ClassworkPartial
     suspend fun updatePartialStatus(partialId: String, status: ClassworkStatus)
 
     // Activity Operations
@@ -36,12 +44,20 @@ class FirebaseClassworkRepository(
         "description" to description,
         "type" to type.name,
         "status" to status.name,
-        "dueDate" to (dueDate?.let {
-            Timestamp(it.atStartOfDay(ZoneId.systemDefault()).toInstant())
-        } ?: FieldValue.delete()), // Handle null dates
+        "dueDate" to (dueDate ?: FieldValue.delete()),
         "aiContext" to aiGenerationContext,
-        "createdDate" to Timestamp.now() as Any // Explicit cast
-    ).filterValues { it != FieldValue.delete() } // Remove deleted fields
+        "createdDate" to Timestamp.now()
+    ).filterValues { it != FieldValue.delete() }
+
+    private fun ClassworkPartial.toFirestoreMap(): Map<String, Any> = mapOf(
+        "id" to id,
+        "groupId" to groupId,
+        "partialNumber" to partialNumber,
+        "title" to title,
+        "status" to status.name,
+        "createdDate" to createdDate,
+        "lastModified" to lastModified
+    )
 
     private fun ClassworkMaterial.toFirestoreMap(): Map<String, Any> = mapOf(
         "id" to id,
@@ -52,17 +68,38 @@ class FirebaseClassworkRepository(
         "createdDate" to Timestamp.now() as Any
     )
 
-    private fun ClassworkPartial.toFirestoreMap(): Map<String, Any> = mapOf(
-        "id" to id,
-        "groupId" to groupId,
-        "partialNumber" to partialNumber,
-        "title" to title,
-        "status" to status.name as Any,
-        "createdDate" to Timestamp.now() as Any,
-        "lastModified" to Timestamp.now() as Any
-    )
-
     // Partial Operations
+    override fun getPartialsFlow(groupId: String): Flow<List<ClassworkPartial>> = callbackFlow {
+        val query = firestore.collection("classwork_partials")
+            .whereEqualTo("groupId", groupId)
+            .orderBy("partialNumber")
+
+        val listener = query.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e("Firebase", "Partial snapshot error for groupId: $groupId", error)
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            Log.d("Firebase", "Snapshot for groupId $groupId received with ${snapshot?.documents?.size} documents")
+            val partials = snapshot?.documents?.mapNotNull { doc ->
+                Log.d("Firebase", "Document id: ${doc.id}, data: ${doc.data}")
+                try {
+                    // Use Firestore's built-in conversion; override id field
+                    doc.toObject(ClassworkPartial::class.java)?.copy(id = doc.id)
+                } catch (e: Exception) {
+                    Log.e("Firebase", "Error parsing partial ${doc.id}", e)
+                    null
+                }
+            } ?: emptyList()
+            Log.d("Firebase", "Returning partials: ${partials.map { it.id to it.groupId }}")
+            trySend(partials)
+        }
+        awaitClose { listener.remove() }
+    }
+
+
+
+    // Update existing getClassworkPartials to use the same query structure
     override suspend fun getClassworkPartials(groupId: String): List<ClassworkPartial> {
         return try {
             firestore.collection("classwork_partials")
@@ -70,16 +107,34 @@ class FirebaseClassworkRepository(
                 .orderBy("partialNumber")
                 .get()
                 .await()
-                .toObjects(ClassworkPartial::class.java)
+                .documents
+                .mapNotNull { doc ->
+                    try {
+                        doc.toObject(ClassworkPartial::class.java)?.copy(id = doc.id)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Error parsing partial document ${doc.id}")
+                        null
+                    }
+                }
         } catch (e: Exception) {
+            Timber.e(e, "Failed to get classwork partials")
             emptyList()
         }
     }
 
-    override suspend fun createClassworkPartial(partial: ClassworkPartial) {
-        val docRef = firestore.collection("classwork_partials").document()
-        val newPartial = partial.copy(id = docRef.id)
-        docRef.set(newPartial.toFirestoreMap()).await()
+
+    override suspend fun createClassworkPartial(partial: ClassworkPartial): ClassworkPartial {
+        Log.d("Firebase", "Creating partial in Firestore: $partial")
+        return try {
+            // Use the same ID for document and partial object
+            val docRef = firestore.collection("classwork_partials").document(partial.id)
+            docRef.set(partial.toFirestoreMap()).await()
+            Log.d("Firebase", "Firestore: Partial created with id: ${partial.id} and groupId: ${partial.groupId}")
+            partial
+        } catch (e: Exception) {
+            Log.e("Firebase", "Firestore: Failed to create partial with id: ${partial.id}", e)
+            throw e
+        }
     }
 
     override suspend fun updatePartialStatus(partialId: String, status: ClassworkStatus) {
@@ -134,23 +189,26 @@ class FirebaseClassworkRepository(
         val batch = firestore.batch()
 
         activities.forEach { activity ->
-            // Save activity
-            val activityRef = firestore.collection("classwork_activities").document()
-            val newActivity = activity.copy(id = activityRef.id, partialId = partialId)
+            // Use the provided activity.id (already generated in the view model)
+            val activityRef = firestore.collection("classwork_activities").document(activity.id)
+
+            // Ensure the partialId matches the saved partial's id
+            val newActivity = activity.copy(partialId = partialId)
             batch.set(activityRef, newActivity.toFirestoreMap())
 
-            // Save materials
-            activity.materials.forEach { material ->
-                val materialRef = firestore.collection("classwork_materials").document()
-                val newMaterial = material.copy(
-                    id = materialRef.id,
-                    activityId = activityRef.id
-                )
-                batch.set(materialRef, newMaterial.toFirestoreMap())
+            // Save materials using the IDs from the view model
+            newActivity.materials.forEach { material ->
+                val materialRef = firestore.collection("classwork_materials").document(material.id)
+                batch.set(materialRef, material.toFirestoreMap())
             }
         }
 
-        batch.commit().await()
+        try {
+            batch.commit().await()
+        } catch (e: Exception) {
+            Timber.e(e, "Batch commit failed")
+            throw e
+        }
     }
 
     // Material Operations

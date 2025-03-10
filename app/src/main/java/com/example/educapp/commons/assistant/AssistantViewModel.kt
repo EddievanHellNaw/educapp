@@ -1,23 +1,27 @@
-package com.example.myapp.teacher.assistant
+package com.example.educapp.commons.assistant
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.educapp.commons.UserRole
-import com.example.educapp.commons.assistant.DeepSeekMessage
 import com.example.educapp.commons.assistant.network.AssistantRepository
 import com.example.educapp.commons.assistant.network.AuthRepository
 import com.example.educapp.commons.assistant.network.ChatCompletionRequest
 import com.example.educapp.commons.classwork.ClassworkActivity
 import com.example.educapp.commons.classwork.ClassworkPartial
+import com.example.educapp.commons.classwork.ClassworkStatus
 import com.example.educapp.commons.classwork.ClassworkViewModel
+import com.google.firebase.Timestamp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import timber.log.Timber
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.Date
+import java.util.UUID
 
 data class ChatMessage(
     val text: String,
@@ -33,6 +37,12 @@ class AssistantViewModel(
     private val classworkViewModel: ClassworkViewModel,
     private val authRepository: AuthRepository
 ) : ViewModel() {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        encodeDefaults = true
+    }
 
     private val _selectedModel = MutableStateFlow("deepseek-reasoner")
     val selectedModel: StateFlow<String> get() = _selectedModel
@@ -106,31 +116,57 @@ class AssistantViewModel(
         }
     }
 
-    private fun processAiResponse(response: String, partialId: String) {
+    private fun processGeneratedResponse(response: String, partialId: String) {
         try {
-            val activities = Json.decodeFromString<List<ClassworkActivity>>(response)
-            _generatedActivities.value = activities.map {
+            val parsed = json.decodeFromString<ActivityGenerationResponse>(response)
+            val activitiesWithPartial = parsed.activities.map {
                 it.copy(partialId = partialId)
             }
+            _generatedActivities.value = activitiesWithPartial
         } catch (e: Exception) {
-            Timber.e(e, "Failed to parse AI response")
-            // Add fallback parsing if needed
+            Timber.e(e, "Activity parsing failed")
+            _messages.value += ChatMessage(
+                text = "⚠️ Failed to parse activities - invalid format",
+                sender = "system"
+            )
         }
     }
+
+    @Serializable
+    data class ActivityGenerationResponse(
+        val activities: List<ClassworkActivity>
+    )
 
     fun confirmActivities() {
         viewModelScope.launch {
             try {
-                val activities = _generatedActivities.value
-                classworkViewModel.processAiResponse(
-                    partialId = _generatedActivities.value.first().partialId,
-                    aiResponse = Json.encodeToString(
-                        ListSerializer(ClassworkActivity.serializer()), // Explicit serializer
-                        activities // Value to serialize
-                    )                )
+                // 1. Create new partial with proper fields
+                val newPartial = ClassworkPartial(
+                    id = UUID.randomUUID().toString(),
+                    groupId = groupId,
+                    partialNumber = classworkViewModel.partials.value.size + 1,
+                    status = ClassworkStatus.DRAFT,
+                    createdDate = Timestamp.now(),       // Use Firebase Timestamp instead of LocalDate.now()
+                    lastModified = Timestamp.now() // Add this field
+                )// Compute dueDate as a Timestamp. For example, one week from now:
+                val dueDate = Timestamp(Date.from(LocalDate.now().plusWeeks(1)
+                    .atStartOfDay(ZoneId.systemDefault()).toInstant()))
+
+                // 2. Save to Firestore
+                classworkViewModel.savePartialWithActivities(
+                    partial = newPartial,
+                    activities = _generatedActivities.value.map { activity ->
+                        activity.copy(
+                            partialId = newPartial.id,
+                            dueDate = dueDate
+                        )
+                    }
+                )
+
+                // 3. Clear generated activities
                 _generatedActivities.value = emptyList()
             } catch (e: Exception) {
-                Timber.e(e, "Failed to save activities")
+                Timber.e(e, "Failed to confirm activities")
             }
         }
     }
@@ -247,21 +283,25 @@ class AssistantViewModel(
     }
 
     private fun handlePotentialActivityResponse(response: String, placeholderIndex: Int) {
-        viewModelScope.launch {
-            try {
-                val activities = Json.decodeFromString<List<ClassworkActivity>>(response)
-                if (activities.isNotEmpty()) {
-                    _generatedActivities.value = activities
-                    _messages.value = _messages.value.mapIndexed { i, msg ->
-                        if (i == placeholderIndex) msg.copy(
-                            text = "${msg.text}\n\n✅ Found ${activities.size} activities"
-                        ) else msg
-                    }
-                }
-            } catch (e: Exception) {
-                Timber.d("No valid activities found in response")
+        try {
+            // Look for JSON pattern in the full response
+            val jsonResponse = response.substringAfter("{").substringBeforeLast("}").trim()
+            val wrapper = json.decodeFromString<ActivityGenerationResponse>("{$jsonResponse}")
+
+            _generatedActivities.value = wrapper.activities
+            updateMessage(placeholderIndex) {
+                it.copy(text = "${it.text}\n✅ Found ${wrapper.activities.size} activities")
             }
+        } catch (e: Exception) {
+            Timber.d("No valid activities in response")
         }
+    }
+
+    private fun updateMessage(index: Int, transform: (ChatMessage) -> ChatMessage) {
+        val newList = _messages.value.toMutableList().apply {
+            set(index, transform(this[index]))
+        }
+        _messages.value = newList
     }
 
     fun handleSuccessfulGeneration(response: String, classworkViewModel: ClassworkViewModel) {
@@ -287,13 +327,68 @@ class AssistantViewModel(
             "teacher" -> """
                 You are an educational assistant who specializes in helping teachers design lesson plans and dynamic activities for ESL groups. Your approach is friendly, clear, and practical, always aiming to make learning both engaging and efficient. You excel at creating fun, interactive activities and breaking down grammar concepts into simple, digestible parts.
 
-                Key points to keep in mind:
-                
-                Audience: Your students are college-aged (over 17), primarily Mexican, and have English proficiency levels ranging from A1 to B1 (CEFR).
-                Style: Keep your responses concise, relatable, and focused on what’s immediately useful. Use a conversational tone while maintaining clarity.
-                Resources: Provide links to quality resources when relevant, but avoid overwhelming teachers with overly time-consuming materials unless they ask for it.
-                Flexibility: Wait for specific instructions or details before suggesting activities or lesson plans, and tailor your ideas to the teacher’s needs.
-                Creativity: If asked for more creative or in-depth materials, don’t hesitate to suggest inventive ways to use existing resources without extensive prep time.
+Key Points
+Audience: College-aged (17+), primarily Mexican students, English proficiency A1–B1 (CEFR).
+Style: Keep responses concise, relatable, and focused on immediate usefulness. Maintain a conversational tone while staying clear and organized.
+Resources: Provide links to quality, free/open resources when relevant, but avoid overwhelming teachers unless they specifically request more.
+Flexibility: Wait for specific instructions or details before suggesting activities or lesson plans, and tailor your ideas to the teacher’s needs.
+Creativity: If asked for more creative or in-depth materials, propose inventive ways to use existing resources without extensive prep time.
+When to Use JSON
+Only respond with valid JSON (matching the structure below) when explicitly asked to “generate” or “create” an activity.
+In all other cases, continue to chat normally and provide clear, helpful answers in plain text.
+Required JSON Structure
+When generating activities, always return them inside an "activities" array, using this exact format:
+
+{
+  "activities": [
+    {
+      "title": "Activity Title",
+      "description": "Detailed instructions...",
+      "type": "ROLE_PLAY | GRAMMAR_EXERCISE | VOCABULARY_DRILL | READING_ASSIGNMENT",
+      "dueDate": "YYYY-MM-DD", // Optional
+      "aiGenerationContext": "AI's reasoning for this activity",
+      "materials": [
+        {
+          "type": "PDF | IMAGE | TEXT | VIDEO | AUDIO | LINK",
+          "content": "URL or text content",
+          "description": "Material purpose"
+        }
+      ]
+    }
+  ]
+}
+Rules
+Use Mexican cultural references wherever relevant.
+Activities must last 45–90 minutes.
+Materials must be free/open educational resources.
+The internal status field is always DRAFT by default—do not set it in the JSON output.
+Allowed activity types: ROLE_PLAY, GRAMMAR_EXERCISE, VOCABULARY_DRILL, READING_ASSIGNMENT.
+Include at least 1 material per activity.
+Example Valid Response
+{
+  "activities": [
+    {
+      "title": "Market Day Roleplay",
+      "description": "Students practice shopping dialogues using Mexican market vocabulary...",
+      "type": "ROLE_PLAY",
+      "dueDate": "2024-03-15",
+      "aiGenerationContext": "Develops practical communication skills in authentic Mexican context",
+      "materials": [
+        {
+          "type": "PDF",
+          "content": "https://example.com/market-roleplay.pdf",
+          "description": "Bilingual vocabulary sheet"
+        },
+        {
+          "type": "LINK",
+          "content": "https://youtube.com/mexican-market-tour",
+          "description": "Virtual market tour video"
+        }
+      ]
+    }
+  ]
+}
+
 
             """.trimIndent()
             "student" -> """

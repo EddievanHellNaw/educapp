@@ -13,9 +13,14 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import android.content.Context
 import android.widget.CalendarView
+import androidx.compose.animation.animateColor
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDp
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -23,7 +28,12 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ButtonDefaults
@@ -58,6 +68,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import java.time.Instant
 import java.time.LocalDate
@@ -252,6 +266,7 @@ fun GradientCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class) // Needed if you use .blur in Compose
 @Composable
 fun FrostedGlassTextField(
     value: String,
@@ -263,28 +278,40 @@ fun FrostedGlassTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     modifier: Modifier = Modifier
 ) {
+    // Decide how translucent you want the frosted background to be
+    val frostedSurface = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
+
+    // Keep the same logic for focus animations, if you like
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val animatedElevation by animateDpAsState(
-        targetValue = if (isFocused) 12.dp else 6.dp,
-        animationSpec = tween(100)
+        targetValue = if (isFocused) 10.dp else 4.dp,
+        animationSpec = tween(150)
     )
 
+    // The main container simulating frosted glass
     Box(
         modifier = modifier
             .shadow(
                 elevation = animatedElevation,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(50), // Larger corner radius for a pill shape
                 ambientColor = MaterialTheme.colorScheme.onSurface,
                 spotColor = MaterialTheme.colorScheme.surfaceTint
             )
+            // If you want a subtle second shadow, you can keep it or remove it
             .shadow(
                 elevation = animatedElevation,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(50),
                 ambientColor = MaterialTheme.colorScheme.surfaceTint,
                 spotColor = MaterialTheme.colorScheme.secondary
             )
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+            // Apply an actual blur if you like. This is optional & experimental
+            .blur(radius = 10.dp)
+            // Translucent background to mimic frosted glass
+            .background(
+                color = frostedSurface,
+                shape = RoundedCornerShape(50)
+            )
     ) {
         TextField(
             value = value,
@@ -305,7 +332,7 @@ fun FrostedGlassTextField(
             trailingIcon = trailingIcon,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
@@ -319,11 +346,12 @@ fun FrostedGlassTextField(
             ),
             keyboardOptions = keyboardOptions,
             interactionSource = interactionSource,
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(50),
             singleLine = true
         )
     }
 }
+
 
 @Composable
 fun GlowingOutlinedTextField(
@@ -411,3 +439,63 @@ fun FrostedBox(
         content()
     }
 }
+
+@Composable
+fun FrostedSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    // Colors for the "on" and "off" states
+    onColor: Color = MaterialTheme.colorScheme.primary,    // e.g., a soft purple
+    offColor: Color = MaterialTheme.colorScheme.surface,   // e.g., a frosty white
+    thumbColor: Color = MaterialTheme.colorScheme.onSurface,
+    thumbSize: Dp = 24.dp
+) {
+    // We use an updateTransition to animate between checked and unchecked states
+    val transition = updateTransition(targetState = checked, label = "switchTransition")
+
+    // Animate the background color from onColor to offColor
+    val backgroundColor by transition.animateColor(label = "backgroundColor") { isChecked ->
+        if (isChecked) onColor else offColor
+    }
+
+    // Animate the alignment of the thumb from left to right
+    val alignment by transition.animateFloat(label = "thumbAlignment") { isChecked ->
+        if (isChecked) 1f else 0f
+    }
+
+    // A subtle shadow/elevation for the entire switch
+    val elevation by transition.animateDp(label = "switchElevation") { isChecked ->
+        if (isChecked) 8.dp else 4.dp
+    }
+
+    // Container Box that is clickable to toggle
+    Box(
+        modifier = modifier
+            .width(50.dp) // Adjust overall width as needed
+            .height(28.dp)
+            .clip(RoundedCornerShape(50))  // pill shape
+            .background(backgroundColor)
+            .hapticClickable{ onCheckedChange(!checked) }
+            .padding(horizontal = 4.dp)
+            .shadow(elevation, RoundedCornerShape(50))
+    ) {
+        // The thumb
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(
+                    x = with(LocalDensity.current) {
+                        // Convert (50.dp - thumbSize - 8.dp) to px,
+                        // multiply by alignment, then convert back to Dp.
+                        ((50.dp - thumbSize - 8.dp).toPx() * alignment).toDp()
+                    }
+                )
+                .size(thumbSize)
+                .clip(CircleShape)
+                .background(thumbColor)
+                .shadow(elevation = 2.dp, shape = CircleShape)
+        )
+    }
+}
+

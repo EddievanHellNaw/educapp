@@ -112,4 +112,5 @@ dependencies {
     implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
     implementation ("com.squareup.retrofit2:converter-scalars:2.9.0")
     implementation ("com.squareup.retrofit2:retrofit:2.9.0")
+    coreLibraryDesugaring ("com.android.tools:desugar_jdk_libs:2.0.4")
 }

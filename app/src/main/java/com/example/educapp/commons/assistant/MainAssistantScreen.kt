@@ -28,20 +28,21 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,38 +50,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
-import com.example.myapp.teacher.assistant.AssistantViewModel
-import com.example.myapp.teacher.assistant.ChatMessage
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.sp
-import com.halilibo.richtext.commonmark.Markdown
-import com.halilibo.richtext.ui.material3.RichText
-import androidx.compose.material3.Surface
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
-import com.example.educapp.commons.RegistrationViewModel
-import com.example.educapp.commons.UserRole
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
 import com.example.educapp.commons.classwork.ClassworkActivity
+import com.example.educapp.commons.classwork.ClassworkStatus
 import com.example.educapp.commons.classwork.ClassworkViewModel
 import com.example.educapp.commons.ui.GradientCard
 import com.example.educapp.commons.ui.HapticButton
 import com.example.educapp.commons.ui.hapticClickable
+import com.halilibo.richtext.commonmark.Markdown
+import com.halilibo.richtext.ui.material3.RichText
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
 fun AssistantScreen(
     navController: NavController,
-    viewModel: AssistantViewModel
+    viewModel: AssistantViewModel,
+    groupId: String // Add groupId parameter
 ) {
     val generatedActivities by viewModel.generatedActivities.collectAsState()
 
@@ -90,13 +84,13 @@ fun AssistantScreen(
         if (generatedActivities.isNotEmpty()) {
             ActivityPreviewOverlay(
                 activities = generatedActivities,
+                groupId = groupId, // Pass groupId down
                 onApprove = { viewModel.confirmActivities() },
                 onCancel = { viewModel.clearGeneratedActivities() }
             )
         }
     }
 }
-
 @Composable
 private fun MainAssistantContent(viewModel: AssistantViewModel) {
 
@@ -313,13 +307,6 @@ fun MessageBubble(
     }
 }
 
-
-
-/**
- * A simple infinite gradient text animation.
- * Make sure your primary and secondary theme colors are somewhat distinct,
- * or replace with your own color stops for a more obvious animation.
- */
 @Composable
 fun AnimatedGradientText(text: String) {
     // Animate a gradient across the text using an infinite transition
@@ -433,36 +420,38 @@ fun ModelSelector(viewModel: AssistantViewModel) {
 @Composable
 fun ActivityPreviewOverlay(
     activities: List<ClassworkActivity>,
+    groupId: String,
     onApprove: () -> Unit,
     onCancel: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
-            .clickable(onClick = onCancel),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Background layer: fills the screen and is clickable to cancel
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(onClick = onCancel)
+        )
+        // Foreground: the card that shows the activities; clicks here will not propagate to the background
         GradientCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
-                .heightIn(max = 600.dp),
+                .heightIn(max = 600.dp)
+                .align(Alignment.Center)
+                .clickable(enabled = false) {} // disable clicking on the card so it doesn't block inner clicks
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     "Review Generated Activities",
                     style = MaterialTheme.typography.headlineSmall
                 )
-
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(activities) { activity ->
-                        ActivityPreviewItem(activity)
+                        ActivityItem(activity = activity, onApprove = { })
                     }
                 }
-
-                Spacer(Modifier.height(16.dp))
-
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -470,8 +459,7 @@ fun ActivityPreviewOverlay(
                     HapticButton(onClick = onCancel) {
                         Text("Cancel")
                     }
-
-                    HapticButton (onClick = onApprove) {
+                    HapticButton(onClick = onApprove) {
                         Text("Approve & Save")
                     }
                 }
@@ -480,48 +468,27 @@ fun ActivityPreviewOverlay(
     }
 }
 
+
 @Composable
-fun ActivityPreviewItem(activity: ClassworkActivity) {
-    GradientCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(16.dp)
-        ) {
-            Text(
-                text = activity.title,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
+fun ActivityItem(activity: ClassworkActivity, onApprove: () -> Unit) {
+    GradientCard {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(activity.title, modifier = Modifier.weight(1f))
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = activity.description,
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Materials section
-            if (activity.materials.isNotEmpty()) {
-                Text(
-                    text = "Materials Needed:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                activity.materials.forEach { material ->
-                    Text(
-                        text = "• $material",
-                        style = MaterialTheme.typography.bodySmall
+                if (activity.status == ClassworkStatus.DRAFT) {
+                    HapticButton(onClick = onApprove) {
+                        Text("Approve")
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Approved",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
+            Text(activity.description)
         }
     }
 }

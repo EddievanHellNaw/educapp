@@ -1,5 +1,6 @@
 package com.example.educapp.commons.classwork
 
+import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,8 +40,10 @@ fun ClassworkPartialScreen(
     viewModel: ClassworkViewModel = koinViewModel(parameters = { parametersOf(groupId) }),
     attendanceViewModel: AttendanceViewModel = koinViewModel()
 ) {
+    val activities by viewModel.activities.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val partials by viewModel.partials.collectAsState()
+    Log.d("DEBUG", "ClassworkPartialScreen groupId = $groupId")
 
     Box(modifier = Modifier.fillMaxSize()) {
         when (uiState) {
@@ -62,11 +65,11 @@ fun ClassworkPartialScreen(
                 } else {
                     ClassworkList(
                         partials = partials,
-                        attendanceViewModel = attendanceViewModel,
+                        activities = activities,
+                        attendanceViewModel = attendanceViewModel, // Add this
                         onApprove = { viewModel.approvePartial(it.id) },
-                        onSelect = { /* Handle navigation */ },
                         groupId = groupId,
-                        navController = navController
+                        navController = navController // Add this
                     )
                 }
             }
@@ -84,28 +87,32 @@ fun ClassworkPartialScreen(
 @Composable
 private fun ClassworkList(
     partials: List<ClassworkPartial>,
-    attendanceViewModel: AttendanceViewModel,
+    activities: List<ClassworkActivity>,
+    attendanceViewModel: AttendanceViewModel, // Add this parameter
     onApprove: (ClassworkPartial) -> Unit,
-    onSelect: (ClassworkPartial) -> Unit,
-    groupId: String,  // Add groupId as a parameter
-    navController: NavHostController  // Pass NavController
+    groupId: String,
+    navController: NavHostController
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(modifier = Modifier.padding(16.dp)) {
-            items(
-                items = partials,
-                key = { it.id }
-            ) { partial ->
-                val group by attendanceViewModel.getGroupById(partial.groupId)
-                    .collectAsState(initial = null)
+    LazyColumn {
+        items(partials) { partial ->
+            // Get group for this partial
+            val group by attendanceViewModel.getGroupById(partial.groupId)
+                .collectAsState(initial = null)
 
-                PartialClassworkCard(
-                    partial = partial,
-                    group = group,
-                    onApprove = { onApprove(partial) },
-                    onSelect = { onSelect(partial) }
-                )
-            }
+            val partialActivities = activities
+                .filter { it.partialId == partial.id }
+                .sortedBy { it.dueDate }
+
+            PartialClassworkCard(
+                partial = partial,
+                activities = partialActivities,
+                group = group,
+                onApprove = { onApprove(partial) },
+                onSelect = {
+                    // Add navigation to partial detail
+                    navController.navigate("partialDetail/${partial.id}")
+                }
+            )
         }
     }
 }
@@ -113,6 +120,7 @@ private fun ClassworkList(
 @Composable
 private fun PartialClassworkCard(
     partial: ClassworkPartial,
+    activities: List<ClassworkActivity>,
     group: AttendanceGroup?,
     onApprove: () -> Unit,
     onSelect: () -> Unit

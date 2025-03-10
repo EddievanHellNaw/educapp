@@ -20,6 +20,8 @@ import androidx.navigation.NavHostController
 import com.example.educapp.commons.teacher.calendar.Event
 import com.example.educapp.commons.teacher.calendar.EventRepository
 import com.example.educapp.commons.teacher.calendar.scheduleNotification
+import com.example.educapp.commons.ui.FrostedGlassTextField
+import com.example.educapp.commons.ui.FrostedSwitch
 import com.example.educapp.commons.ui.HapticButton
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
@@ -55,20 +57,21 @@ fun EventCreationScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            TextField(value = title, onValueChange = { title = it }, label = { Text("Title") })
+            FrostedGlassTextField(value = title, onValueChange = { title = it }, label = "Title" )
             Spacer(modifier = Modifier.height(8.dp))
 
-            TextField(
+            FrostedGlassTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Description") })
+                label = "Description"
+            )
             Spacer(modifier = Modifier.height(8.dp))
 
             // Row to show and pick the event time
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Time: ${eventTime.toString()}")
                 Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = { showTimePicker = true }) {
+                HapticButton(onClick = { showTimePicker = true }) {
                     Text("Pick Time")
                 }
             }
@@ -93,13 +96,13 @@ fun EventCreationScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Remind one day before")
                 Spacer(modifier = Modifier.width(8.dp))
-                Switch(checked = remindOneDayBefore, onCheckedChange = { remindOneDayBefore = it })
+                FrostedSwitch(checked = remindOneDayBefore, onCheckedChange = { remindOneDayBefore = it })
             }
             Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Remind one week before")
                 Spacer(modifier = Modifier.width(8.dp))
-                Switch(
+                FrostedSwitch(
                     checked = remindOneWeekBefore,
                     onCheckedChange = { remindOneWeekBefore = it })
             }
