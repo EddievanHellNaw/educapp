@@ -5,26 +5,51 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 
+enum class EventSource {
+    MANUAL,
+    UASLP_ACADEMIC_CALENDAR
+}
+
 data class Event(
     val id: String = "",
     val title: String = "",
     val description: String = "",
-    // The scheduled event time as stored in Firestore
+
+    // Start of the event. Existing calendar queries continue to use this field.
     val dateTime: Timestamp = Timestamp.now(),
-    // Reminder option: whether a reminder should be sent
+
+    // Optional end for multi-day imported events.
+    val endDateTime: Timestamp? = null,
+
+    // Academic-calendar entries will normally be all-day events.
+    val allDay: Boolean = false,
+
+    // Reminder settings used by the existing Worker implementation.
     val remind: Boolean = false,
-    // The time at which the reminder should fire (as a Timestamp), if any
-    val reminderTime: Timestamp? = null
+    val reminderTime: Timestamp? = null,
+
+    // Identifies how the event entered the application.
+    val source: String = EventSource.MANUAL.name,
+
+    // Deterministic logical key used to avoid duplicate imported events.
+    // Manual events leave this blank.
+    val sourceKey: String = "",
+
+    // Reserved for Stage 2/3 calendar recognition, e.g. WRITTEN_EXAM, HOLIDAY.
+    val academicType: String = ""
 ) {
-    // Helper to convert Firestore Timestamp -> LocalDate
     fun toLocalDate(): LocalDate {
         val instant = dateTime.toDate().toInstant()
         return instant.atZone(ZoneId.systemDefault()).toLocalDate()
     }
 
-    // Helper to convert Firestore Timestamp -> LocalTime
     fun toLocalTime(): LocalTime {
         val instant = dateTime.toDate().toInstant()
         return instant.atZone(ZoneId.systemDefault()).toLocalTime()
+    }
+
+    fun toEndLocalDate(): LocalDate? {
+        val instant = endDateTime?.toDate()?.toInstant() ?: return null
+        return instant.atZone(ZoneId.systemDefault()).toLocalDate()
     }
 }

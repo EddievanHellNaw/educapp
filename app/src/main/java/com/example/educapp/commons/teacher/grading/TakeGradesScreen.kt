@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +42,25 @@ import com.example.educapp.commons.ui.hapticClickable
 import kotlinx.coroutines.delay
 import com.example.educapp.R
 import com.example.educapp.commons.teacher.settings.SettingsViewModel
+import com.example.educapp.commons.teacher.attendance.StudentPortrait
+import com.example.educapp.commons.ui.FrostedBox
+import com.example.educapp.commons.teacher.attendance.StudentPortrait
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+
+import com.example.educapp.commons.teacher.attendance.StudentPortrait
+import com.example.educapp.commons.ui.FrostedBox
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +82,8 @@ fun TakeGradesScreen(
     var showAlarmDialog by remember { mutableStateOf(false) }
     // MediaPlayer state to keep track of the sound
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-
+    val currentGroup by
+    viewModel.currentGroup.collectAsState()
     val studentGrades by viewModel.studentGrades.collectAsState()
     Log.d("TakeGradesScreen", "studentGrades: $studentGrades")
 // This effect runs whenever `isTimerRunning` changes
@@ -152,6 +173,20 @@ fun TakeGradesScreen(
                     items(studentGrades) { grade ->
                         StudentGradingCard(
                             grade = grade,
+
+                            photoBase64 =
+                            currentGroup
+                                ?.studentPhotos
+                                ?.get(
+                                    grade.studentName
+                                ),
+
+                            groupColor =
+                            currentGroup
+                                ?.getColor()
+                                ?: MaterialTheme
+                                    .colorScheme
+                                    .primary,
                             onUpdateOral = { grv, dm, pron, intCom ->
                                 viewModel.updateOralGrade(
                                     studentName = grade.studentName,
@@ -184,106 +219,474 @@ fun TakeGradesScreen(
 @Composable
 fun StudentGradingCard(
     grade: StudentGrade,
-    onUpdateOral: (grv: Int, dm: Int, pron: Int, intCom: Int) -> Unit,
-    onUpdateWrittenPortfolio: (written: Int, portfolio: Int) -> Unit
+    photoBase64: String?,
+    groupColor: Color,
+    onUpdateOral: (
+        grv: Int,
+        dm: Int,
+        pron: Int,
+        intCom: Int
+    ) -> Unit,
+    onUpdateWrittenPortfolio: (
+        written: Int,
+        portfolio: Int
+    ) -> Unit
 ) {
-    val isOralGraded = grade.oral > 0
-    val isWrittenGraded = grade.written > 0 && grade.portfolio > 0
 
-    var showOralDialog by remember { mutableStateOf(false) }
-    var showWrittenDialog by remember { mutableStateOf(false) }
+    var showOralDialog by remember {
+        mutableStateOf(false)
+    }
 
-    // -- Dialogs --
+    var showWrittenDialog by remember {
+        mutableStateOf(false)
+    }
+
+
+    /*
+     * -----------------------------
+     * GRADING DIALOGS
+     * -----------------------------
+     */
+
     if (showOralDialog) {
+
         OralDialog(
-            onDismiss = { showOralDialog = false },
-            onConfirm = { grv, dm, pron, intCom ->
-                onUpdateOral(grv, dm, pron, intCom)
+            initialGrv = grade.oralGrV,
+            initialDm = grade.oralDM,
+            initialPron = grade.oralPron,
+            initialIntCom = grade.oralIntCom,
+
+            onDismiss = {
+                showOralDialog = false
+            },
+
+            onConfirm = {
+                    grv,
+                    dm,
+                    pron,
+                    intCom ->
+
+                onUpdateOral(
+                    grv,
+                    dm,
+                    pron,
+                    intCom
+                )
+
                 showOralDialog = false
             }
         )
     }
+
+
     if (showWrittenDialog) {
+
         WrittenPortfolioDialog(
-            onDismiss = { showWrittenDialog = false },
-            onConfirm = { written, portfolio ->
-                onUpdateWrittenPortfolio(written, portfolio)
+            initialWritten = grade.written,
+            initialPortfolio = grade.portfolio,
+
+            onDismiss = {
+                showWrittenDialog = false
+            },
+
+            onConfirm = {
+                    written,
+                    portfolio ->
+
+                onUpdateWrittenPortfolio(
+                    written,
+                    portfolio
+                )
+
                 showWrittenDialog = false
             }
         )
     }
 
-    // -- The card layout --
+
     GradientCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
+            .padding(
+                horizontal = 8.dp,
+                vertical = 5.dp
+            ),
+
+        gradientBrush =
+        Brush.horizontalGradient(
+            colors = listOf(
+                MaterialTheme
+                    .colorScheme
+                    .surface,
+
+                groupColor
+            )
+        )
     ) {
-        // Use a Row so we can have the name+label on the left and
-        // the two vertical buttons on the right
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(10.dp),
+
+            verticalAlignment =
+            Alignment.CenterVertically
         ) {
-            // -- Left column: Name on top, status label below
+
+            /*
+             * Student picture
+             */
+            StudentPortrait(
+                student = grade.studentName,
+                photoBase64 = photoBase64,
+                compact = true
+            )
+
+
+            Spacer(
+                modifier = Modifier.width(10.dp)
+            )
+
+
+            /*
+             * Student information
+             */
             Column(
-                modifier = Modifier.weight(2f) // Takes more space
+                modifier = Modifier.weight(1f)
             ) {
-                // Student name
+
                 Text(
                     text = grade.studentName,
-                    style = MaterialTheme.typography.headlineMedium
+                    style =
+                    MaterialTheme.typography
+                        .bodyLarge
                 )
-                Spacer(modifier = Modifier.height(4.dp))
 
-                // Status label
-                when {
-                    isOralGraded && isWrittenGraded -> {
-                        Text(
-                            text = "✓ Oral & Written Graded",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
+
+                Spacer(
+                    modifier =
+                    Modifier.height(5.dp)
+                )
+
+
+                AssessmentProgressBadge(
+                    oralCompleted =
+                    grade.oralCompleted,
+
+                    writtenCompleted =
+                    grade.writtenCompleted
+                )
+
+
+                Spacer(
+                    modifier =
+                    Modifier.height(5.dp)
+                )
+
+
+                FrostedBox {
+
+                    Row(
+                        modifier = Modifier
+                            .padding(
+                                horizontal = 7.dp,
+                                vertical = 4.dp
+                            ),
+
+                        horizontalArrangement =
+                        Arrangement.spacedBy(
+                            10.dp
                         )
-                    }
-                    isOralGraded -> {
+                    ) {
+
                         Text(
-                            text = "✓ Oral Graded",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
+                            text =
+                            "Faltas ${grade.noFaltas}",
+
+                            style =
+                            MaterialTheme.typography
+                                .labelSmall,
+
+                            color =
+                            if (grade.noFaltas > 0) {
+                                MaterialTheme
+                                    .colorScheme.error
+                            } else {
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface
+                            }
                         )
-                    }
-                    else -> {
+
+
                         Text(
-                            text = "Grade Pending",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
+                            text =
+                            "Oral ${grade.oral}",
+
+                            style =
+                            MaterialTheme.typography
+                                .labelSmall
+                        )
+
+
+                        Text(
+                            text =
+                            "Written ${grade.written}",
+
+                            style =
+                            MaterialTheme.typography
+                                .labelSmall
                         )
                     }
                 }
             }
 
-            // -- Right column: Two vertical buttons
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+
+            Spacer(
+                modifier =
+                Modifier.width(8.dp)
+            )
+
+
+            /*
+             * Compact grading actions.
+             */
+            Row(
+                horizontalArrangement =
+                Arrangement.spacedBy(
+                    6.dp
+                )
             ) {
-                // Button for Oral
-                HapticButton(
-                    onClick = { showOralDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Oral")
+
+                GradeActionIcon(
+                    icon =
+                    Icons.Filled.Mic,
+
+                    description =
+                    "Grade oral exam",
+
+                    completed =
+                    grade.oralCompleted,
+
+                    onClick = {
+                        showOralDialog = true
+                    }
+                )
+
+
+                GradeActionIcon(
+                    icon =
+                    Icons.Filled.Description,
+
+                    description =
+                    "Grade written exam",
+
+                    completed =
+                    grade.writtenCompleted,
+
+                    onClick = {
+                        showWrittenDialog = true
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssessmentProgressBadge(
+    oralCompleted: Boolean,
+    writtenCompleted: Boolean
+) {
+
+    val completed =
+        listOf(
+            oralCompleted,
+            writtenCompleted
+        ).count { it }
+
+
+    val color =
+        when (completed) {
+
+            0 ->
+                MaterialTheme
+                    .colorScheme
+                    .error
+
+            1 ->
+                Color(0xFFFBC02D)
+
+            else ->
+                Color(0xFF388E3C)
+        }
+
+
+    val label =
+        when (completed) {
+
+            0 ->
+                "Pending · 0/2"
+
+            1 ->
+                "In progress · 1/2"
+
+            else ->
+                "Complete · 2/2"
+        }
+
+
+    Row(
+        verticalAlignment =
+        Alignment.CenterVertically
+    ) {
+
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .background(
+                    color,
+                    CircleShape
+                )
+        )
+
+
+        Spacer(
+            modifier =
+            Modifier.width(5.dp)
+        )
+
+
+        Text(
+            text = label,
+
+            style =
+            MaterialTheme.typography
+                .labelMedium,
+
+            color = color
+        )
+    }
+}
+
+@Composable
+private fun GradeActionIcon(
+    icon: ImageVector,
+    description: String,
+    completed: Boolean,
+    onClick: () -> Unit
+) {
+
+    val completedColor =
+        Color(0xFF388E3C)
+
+
+    Box {
+
+        Surface(
+            modifier = Modifier
+                .size(46.dp)
+                .hapticClickable {
+                    onClick()
+                },
+
+            shape = CircleShape,
+
+            color =
+            if (completed) {
+                completedColor.copy(
+                    alpha = 0.18f
+                )
+            } else {
+                MaterialTheme
+                    .colorScheme
+                    .surface
+                    .copy(alpha = 0.4f)
+            },
+
+            border =
+            BorderStroke(
+                width =
+                if (completed) {
+                    2.dp
+                } else {
+                    1.dp
+                },
+
+                color =
+                if (completed) {
+                    completedColor
+                } else {
+                    MaterialTheme
+                        .colorScheme
+                        .outline
+                        .copy(alpha = 0.4f)
                 }
-                // Button for Written + Portfolio
-                HapticButton(
-                    onClick = { showWrittenDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Written")
-                }
+            )
+        ) {
+
+            Box(
+                modifier =
+                Modifier.fillMaxSize(),
+
+                contentAlignment =
+                Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector = icon,
+
+                    contentDescription =
+                    description,
+
+                    tint =
+                    if (completed) {
+                        completedColor
+                    } else {
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface
+                    },
+
+                    modifier =
+                    Modifier.size(24.dp)
+                )
+            }
+        }
+
+
+        /*
+         * Small completion check.
+         */
+        if (completed) {
+
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .align(
+                        Alignment.TopEnd
+                    )
+                    .background(
+                        completedColor,
+                        CircleShape
+                    ),
+
+                contentAlignment =
+                Alignment.Center
+            ) {
+
+                Icon(
+                    imageVector =
+                    Icons.Filled.Check,
+
+                    contentDescription =
+                    "Completed",
+
+                    tint = Color.White,
+
+                    modifier =
+                    Modifier.size(11.dp)
+                )
             }
         }
     }
@@ -291,44 +694,116 @@ fun StudentGradingCard(
 
 @Composable
 fun OralDialog(
+    initialGrv: Int = 0,
+    initialDm: Int = 0,
+    initialPron: Int = 0,
+    initialIntCom: Int = 0,
     onDismiss: () -> Unit,
-    onConfirm: (gv: Int, dm: Int, pron: Int, intCom: Int) -> Unit
+    onConfirm: (
+        gv: Int,
+        dm: Int,
+        pron: Int,
+        intCom: Int
+    ) -> Unit
 ) {
-    // local states for each aspect
-    var grv by remember { mutableStateOf(0) }
-    var dm by remember { mutableStateOf(0) }
-    var pron by remember { mutableStateOf(0) }
-    var intCom by remember { mutableStateOf(0) }
+
+    var grv by remember(initialGrv) {
+        mutableStateOf(initialGrv)
+    }
+
+    var dm by remember(initialDm) {
+        mutableStateOf(initialDm)
+    }
+
+    var pron by remember(initialPron) {
+        mutableStateOf(initialPron)
+    }
+
+    var intCom by remember(initialIntCom) {
+        mutableStateOf(initialIntCom)
+    }
+
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Oral Grading") },
+
+        title = {
+            Text("Oral Grading")
+        },
+
         text = {
+
             Column {
-                // Four dropdowns or spinners from 0..3
+
                 Text("Gr.V (0–3)")
-                IntSpinner(value = grv, range = 0..3, onValueChange = { grv = it })
+
+                IntSpinner(
+                    value = grv,
+                    range = 0..3,
+                    onValueChange = {
+                        grv = it
+                    }
+                )
+
 
                 Text("DM (0–3)")
-                IntSpinner(value = dm, range = 0..3, onValueChange = { dm = it })
+
+                IntSpinner(
+                    value = dm,
+                    range = 0..3,
+                    onValueChange = {
+                        dm = it
+                    }
+                )
+
 
                 Text("Pron (0–3)")
-                IntSpinner(value = pron, range = 0..3, onValueChange = { pron = it })
+
+                IntSpinner(
+                    value = pron,
+                    range = 0..3,
+                    onValueChange = {
+                        pron = it
+                    }
+                )
+
 
                 Text("Int Com (0–3)")
-                IntSpinner(value = intCom, range = 0..3, onValueChange = { intCom = it })
+
+                IntSpinner(
+                    value = intCom,
+                    range = 0..3,
+                    onValueChange = {
+                        intCom = it
+                    }
+                )
             }
         },
+
         confirmButton = {
-            HapticButton (onClick = {
-                onConfirm(grv, dm, pron, intCom)
-                onDismiss()
-            }) {
+
+            HapticButton(
+                onClick = {
+
+                    onConfirm(
+                        grv,
+                        dm,
+                        pron,
+                        intCom
+                    )
+                }
+            ) {
+
                 Text("Confirm")
             }
         },
+
         dismissButton = {
-            HapticButton (onClick = onDismiss) {
+
+            HapticButton(
+                onClick = onDismiss
+            ) {
+
                 Text("Cancel")
             }
         }
@@ -360,65 +835,146 @@ fun IntSpinner(
 
 @Composable
 fun WrittenPortfolioDialog(
+    initialWritten: Int = 0,
+    initialPortfolio: Int = 0,
     onDismiss: () -> Unit,
-    onConfirm: (written: Int, portfolio: Int) -> Unit
+    onConfirm: (
+        written: Int,
+        portfolio: Int
+    ) -> Unit
 ) {
-    // Keep them as strings for the TextField,
-    // but convert to Int upon confirmation
-    var writtenText by remember { mutableStateOf("") }
-    var portfolioText by remember { mutableStateOf("") }
+
+    var writtenText by
+    remember(initialWritten) {
+        mutableStateOf(
+            initialWritten.toString()
+        )
+    }
+
+
+    var portfolioText by
+    remember(initialPortfolio) {
+        mutableStateOf(
+            initialPortfolio.toString()
+        )
+    }
+
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Written & Portfolio") },
+
+        title = {
+            Text(
+                "Written & Portfolio"
+            )
+        },
+
         text = {
+
             Column {
-                // Written TextField
+
                 FrostedGlassTextField(
                     value = writtenText,
-                    onValueChange = { newValue ->
-                        // Only allow digits
-                        val digitsOnly = newValue.filter { it.isDigit() }
-                        // Optionally limit to 2 or 3 digits
-                        // if you want to avoid huge numbers
-                        writtenText = digitsOnly.take(2)
+
+                    onValueChange = {
+                            newValue ->
+
+                        writtenText =
+                            newValue
+                                .filter {
+                                    it.isDigit()
+                                }
+                                .take(2)
                     },
-                    label = "Written (max 50)",
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+
+                    label =
+                    "Written (max 50)",
+
+                    keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType =
+                        KeyboardType.Number
+                    )
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
 
-                // Portfolio TextField
+                Spacer(
+                    modifier =
+                    Modifier.height(8.dp)
+                )
+
+
                 FrostedGlassTextField(
                     value = portfolioText,
-                    onValueChange = { newValue ->
-                        val digitsOnly = newValue.filter { it.isDigit() }
-                        portfolioText = digitsOnly.take(2)
+
+                    onValueChange = {
+                            newValue ->
+
+                        portfolioText =
+                            newValue
+                                .filter {
+                                    it.isDigit()
+                                }
+                                .take(2)
                     },
-                    label = "Portfolio (max 20)",
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+
+                    label =
+                    "Portfolio (max 20)",
+
+                    keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType =
+                        KeyboardType.Number
+                    )
                 )
             }
         },
+
         confirmButton = {
-            HapticButton(onClick = {
-                // Convert strings to Int safely
-                val w = writtenText.toIntOrNull() ?: 0
-                val p = portfolioText.toIntOrNull() ?: 0
 
-                // Enforce the maximum values
-                val finalWritten = if (w > 50) 50 else w
-                val finalPortfolio = if (p > 20) 20 else p
+            HapticButton(
+                onClick = {
 
-                onConfirm(finalWritten, finalPortfolio)
-                onDismiss()
-            }) {
+                    val written =
+                        (
+                                writtenText
+                                    .toIntOrNull()
+                                    ?: 0
+                                )
+                            .coerceIn(
+                                0,
+                                50
+                            )
+
+                    val portfolio =
+                        (
+                                portfolioText
+                                    .toIntOrNull()
+                                    ?: 0
+                                )
+                            .coerceIn(
+                                0,
+                                20
+                            )
+
+
+                    onConfirm(
+                        written,
+                        portfolio
+                    )
+                }
+            ) {
+
                 Text("Confirm")
             }
         },
+
         dismissButton = {
-            HapticButton(onClick = onDismiss) {
+
+            HapticButton(
+                onClick = onDismiss
+            ) {
+
                 Text("Cancel")
             }
         }

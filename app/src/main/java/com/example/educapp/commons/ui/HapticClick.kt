@@ -142,21 +142,17 @@ fun HapticFloatingActionButton(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp),
-        contentAlignment = Alignment.BottomEnd
-    ) {
-        HapticButton(
-            onClick = onClick,
-            modifier = modifier
-                .defaultMinSize(minWidth = 56.dp, minHeight = 56.dp),
-            shape = RoundedCornerShape(16.dp),
-            baseColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            elevation = 8.dp,
-            content = content
-        )
-    }
+    HapticButton(
+        onClick = onClick,
+        modifier = modifier
+            .defaultMinSize(
+                minWidth = 56.dp,
+                minHeight = 56.dp
+            ),
+        shape = RoundedCornerShape(16.dp),
+        baseColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        elevation = 8.dp,
+        content = content
+    )
 }

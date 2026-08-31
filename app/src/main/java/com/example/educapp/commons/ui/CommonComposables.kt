@@ -23,6 +23,7 @@ fun CircularButton(
     imageResId: Int? = null,
     isLarge: Boolean = false,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     iconColor: Color = MaterialTheme.colorScheme.onSurface // New color parameter
 ) {
     val size = if (isLarge) 64.dp else 48.dp

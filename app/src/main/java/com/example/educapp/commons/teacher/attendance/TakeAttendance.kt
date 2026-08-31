@@ -7,7 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -59,6 +60,28 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.collections.find
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.flow.first
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -163,44 +186,100 @@ fun TakeAttendanceDetailsScreen(
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val attendanceRecords by viewModel.attendanceRecords.collectAsState()
     var showConfirmationDialog by remember { mutableStateOf(false) }
-    var showSnackbar by remember { mutableStateOf(false) }
     var showGoBackButton by remember { mutableStateOf(false) }
+    val snackbarHostState =
+        remember {
+            SnackbarHostState()
+        }
     val group = viewModel.groups.find { it.id == groupId }
     val students = group?.students ?: emptyList()
     val isLoading by viewModel.isLoading.collectAsState()
     val attendanceList = remember { mutableStateListOf<AttendanceRecord>() }
-    var allStudentsHaveRecord by remember { mutableStateOf(false) }
+    val allStudentsHaveRecord =
+        attendanceList.isNotEmpty() &&
+                attendanceList.all {
+                    it.status != null
+                }
     var buttonText by remember { mutableStateOf("Confirm Attendance") }
     var showDatePickerDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(key1 = students) {
-        if (attendanceList.isEmpty()) {
-            students.forEach { student ->
-                val existingRecord = attendanceRecords.find {
-                    it.student == student && it.date == selectedDate
-                }
-                if (existingRecord != null) {
-                    attendanceList.add(existingRecord)
-                } else {
-                    attendanceList.add(
-                        AttendanceRecord(
-                            student = student,
-                            groupId = groupId,
-                            partial = partial,
-                            date = selectedDate,
-                            status = null
-                        )
-                    )
-                }
-            }
+    var initialRecordsLoaded by remember(
+        groupId,
+        partial
+    ) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(
+        groupId,
+        partial
+    ) {
+        initialRecordsLoaded = false
+
+        /*
+         * Wait until the initial Firestore read has
+         * completely finished before allowing attendance
+         * to be edited.
+         *
+         * This prevents a delayed server response from
+         * overwriting attendance that the teacher has
+         * already marked locally.
+         */
+        viewModel
+            .getAttendanceRecordsForGroup(
+                groupId,
+                partial
+            )
+            .first()
+
+        initialRecordsLoaded = true
+    }
+
+    LaunchedEffect(
+        students,
+        selectedDate,
+        initialRecordsLoaded
+    ) {
+
+        /*
+         * Do not build the editable attendance draft until
+         * the initial server read has completed.
+         */
+        if (!initialRecordsLoaded) {
+            return@LaunchedEffect
         }
-        allStudentsHaveRecord = attendanceList.all { it.status != null }
+
+        attendanceList.clear()
+
+        students.forEach { student ->
+
+            val existingRecord =
+                attendanceRecords.find {
+
+                    it.student == student &&
+                            it.groupId == groupId &&
+                            it.partial == partial &&
+                            it.date == selectedDate
+                }
+
+            attendanceList.add(
+                existingRecord
+                    ?: AttendanceRecord(
+                        student = student,
+                        groupId = groupId,
+                        partial = partial,
+                        date = selectedDate,
+                        status = null
+                    )
+            )
+        }
     }
 
     Scaffold(
         snackbarHost = {
             SnackbarHost(
-                hostState = remember { SnackbarHostState() }
+                hostState = snackbarHostState
             )
         },
         bottomBar = {
@@ -266,9 +345,14 @@ fun TakeAttendanceDetailsScreen(
                                     // Update attendance list
                                     attendanceList.clear()
                                     students.forEach { student ->
-                                        val existingRecord = attendanceRecords.find {
-                                            it.student == student && it.date == selectedDate
-                                        }
+                                        val existingRecord =
+                                            attendanceRecords.find {
+
+                                                it.student == student &&
+                                                        it.groupId == groupId &&
+                                                        it.partial == partial &&
+                                                        it.date == selectedDate
+                                            }
                                         if (existingRecord != null) {
                                             attendanceList.add(existingRecord)
                                         } else {
@@ -282,7 +366,7 @@ fun TakeAttendanceDetailsScreen(
                                             )
                                         }
                                     }
-                                    allStudentsHaveRecord = attendanceList.all { it.status != null }
+
                                 }
                             }
                         ) {
@@ -299,81 +383,214 @@ fun TakeAttendanceDetailsScreen(
 
             Spacer(modifier = Modifier.padding(8.dp))
 
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(attendanceList) { record ->
-                    StudentItem(
-                        student = record.student,
-                        status = record.status,
-                        onAttendanceStatusChange = { newStatus ->
-                            Timber.tag("StudentItem")
-                                .d("New status: $newStatus, Date: $selectedDate")
-                            val index = attendanceList.indexOf(record)
-                            if (index != -1 && newStatus != null) {
-                                attendanceList[index] = record.copy(status = newStatus)
-                                viewModel.addOrUpdateAttendanceRecord(attendanceList[index])
-                            }
-                            allStudentsHaveRecord = attendanceList.all { it.status != null }
+            if (!initialRecordsLoaded) {
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+
+            } else {
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+
+                    items(
+                        items = attendanceList,
+                        key = { record ->
+                            "${record.student}-${record.date}-${record.partial}"
                         }
-                    )
+                    ) { record ->
+
+                        StudentItem(
+                            student = record.student,
+
+                            photoBase64 = group
+                                ?.studentPhotos
+                                ?.get(record.student),
+
+                            status = record.status,
+
+                            onAttendanceStatusChange = { newStatus ->
+
+                                Timber.tag("StudentItem")
+                                    .d(
+                                        "New status: $newStatus, " +
+                                                "Date: $selectedDate"
+                                    )
+
+                                val index =
+                                    attendanceList.indexOf(record)
+
+                                if (
+                                    index != -1 &&
+                                    newStatus != null
+                                ) {
+
+                                    attendanceList[index] =
+                                        record.copy(
+                                            status = newStatus
+                                        )
+
+                                    viewModel.addOrUpdateAttendanceRecord(
+                                        attendanceList[index]
+                                    )
+                                }
+                            }
+                        )
+                    }
                 }
             }
 
             if (showConfirmationDialog) {
+
                 AlertDialog(
-                    onDismissRequest = { showConfirmationDialog = false },
-                    title = { Text("Confirm Attendance",style = MaterialTheme.typography.headlineSmall) },
-                    text = { Text("Are you sure you want to save the attendance?",style = MaterialTheme.typography.bodyMedium) },
+                    onDismissRequest = {
+                        if (!isLoading) {
+                            showConfirmationDialog = false
+                        }
+                    },
+
+                    title = {
+                        Text(
+                            text = "Confirm Attendance",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                    },
+
+                    text = {
+                        Text(
+                            text = "Are you sure you want to save the attendance?",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+
                     confirmButton = {
-                        if (!showGoBackButton) {
-                            HapticButton(onClick = {
-                                viewModel.saveAttendance(groupId, attendanceList)
-                                showConfirmationDialog = false
-                                showGoBackButton = true
-                                buttonText = "Go Back"
-                                showSnackbar = true
-                            },modifier = Modifier
+
+                        HapticButton(
+                            onClick = {
+
+                                coroutineScope.launch {
+
+                                    /*
+                                     * Close the confirmation dialog.
+                                     *
+                                     * The main bottom button will show
+                                     * the loading state while Firebase
+                                     * saves and verifies everything.
+                                     */
+                                    showConfirmationDialog = false
+
+                                    val result =
+                                        viewModel.saveAttendanceConfirmed(
+                                            attendanceList.toList()
+                                        )
+
+
+                                    if (result.isSuccess) {
+
+                                        val confirmedRecords =
+                                            result.getOrThrow()
+
+                                        Timber.tag("TakeAttendance")
+                                            .d(
+                                                "Attendance saved and verified. " +
+                                                        "${confirmedRecords.size} records."
+                                            )
+
+                                        showGoBackButton = true
+                                        buttonText = "Go Back"
+
+
+                                        /*
+                                         * This is now connected to Scaffold's
+                                         * actual SnackbarHost.
+                                         */
+                                        snackbarHostState.showSnackbar(
+                                            message =
+                                            "Attendance saved and verified ✓"
+                                        )
+
+                                    } else {
+
+                                        val error =
+                                            result.exceptionOrNull()
+
+                                        Timber.tag("TakeAttendance")
+                                            .e(
+                                                error,
+                                                "Attendance could not be saved"
+                                            )
+
+                                        showGoBackButton = false
+                                        buttonText = "Confirm Attendance"
+
+
+                                        snackbarHostState.showSnackbar(
+                                            message =
+                                            "Save failed: ${
+                                                error?.localizedMessage
+                                                    ?: "Unknown database error"
+                                            }"
+                                        )
+                                    }
+
+
+                                }
+                            },
+
+                            enabled = !isLoading,
+
+                            modifier = Modifier
                                 .width(200.dp)
-                                .height(48.dp)) {
-                                Text("Confirm", style = MaterialTheme.typography.bodySmall)
-                            }
-                        } else {
-                            HapticButton(onClick = {
-                                navController.popBackStack()
-                                showConfirmationDialog = false
-                                showGoBackButton = false
-                            },modifier = Modifier
-                                .width(200.dp)
-                                .height(48.dp)) {
-                                Text("Go Back",style = MaterialTheme.typography.bodyMedium)
+                                .height(48.dp)
+                        ) {
+
+                            if (isLoading) {
+
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp
+                                )
+
+                            } else {
+
+                                Text(
+                                    text = "Confirm",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
                         }
                     },
+
                     dismissButton = {
-                        HapticButton(onClick = { showConfirmationDialog = false },modifier = Modifier
-                            .width(200.dp)
-                            .height(48.dp)) {
-                            Text("Cancel",style = MaterialTheme.typography.bodySmall)
+
+                        HapticButton(
+                            onClick = {
+                                showConfirmationDialog = false
+                            },
+
+                            enabled = !isLoading,
+
+                            modifier = Modifier
+                                .width(200.dp)
+                                .height(48.dp)
+                        ) {
+
+                            Text(
+                                text = "Cancel",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 )
             }
 
-            if (showSnackbar) {
-                Snackbar(
-                    action = {
-                        TextButton(onClick = { showSnackbar = false }) {
-                            Text("OK",style = MaterialTheme.typography.bodySmall)
-                        }
-                    },
-                    modifier = Modifier.padding(16.dp)
-                ) { Text("Attendance saved successfully!",style = MaterialTheme.typography.bodyMedium) }
-                LaunchedEffect(key1 = showSnackbar) {
-                    if (showSnackbar) {
-                        delay(9000)
-                        showSnackbar = false
-                    }
-                }
-            }
         }
     }
 }
@@ -382,106 +599,685 @@ fun TakeAttendanceDetailsScreen(
 @Composable
 fun StudentItem(
     student: String,
+    photoBase64: String? = null,
     status: AttendanceStatus?,
     onAttendanceStatusChange: (AttendanceStatus?) -> Unit
 ) {
-    var selectedStatus by remember { mutableStateOf(status) }
+    val presentColor = Color(0xFF388E3C)
+    val lateColor = Color(0xFFFBC02D)
+    val absentColor = Color(0xFFD32F2F)
 
-    GradientCard(
+    val shape = RoundedCornerShape(12.dp)
+
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+
+    /*
+     * How far the user must swipe before the
+     * attendance status changes.
+     */
+    val swipeThreshold = with(density) {
+        85.dp.toPx()
+    }
+
+    /*
+     * Prevent the card from being dragged
+     * completely off the screen.
+     */
+    val maximumSwipe = with(density) {
+        145.dp.toPx()
+    }
+
+    /*
+     * Local display state.
+     *
+     * remember(student) prevents state belonging to
+     * one student from moving to another LazyColumn row.
+     */
+
+
+    var dragOffset by remember(student) {
+        mutableStateOf(0f)
+    }
+
+    fun markAttendance(
+        newStatus: AttendanceStatus
+    ) {
+
+        onAttendanceStatusChange(
+            newStatus
+        )
+
+        haptic.performHapticFeedback(
+            HapticFeedbackType.TextHandleMove
+        )
+    }
+
+    val statusColor =
+        when (status) {
+            AttendanceStatus.PRESENT -> presentColor
+            AttendanceStatus.LATE -> lateColor
+            AttendanceStatus.ABSENT -> absentColor
+            null -> MaterialTheme.colorScheme.primary
+        }
+
+    /*
+     * Background revealed underneath the card
+     * while swiping.
+     */
+    val swipeBackgroundColor =
+        when {
+            dragOffset > 0f ->
+                presentColor
+
+            dragOffset < 0f ->
+                absentColor
+
+            else ->
+                Color.Transparent
+        }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
+            .padding(
+                horizontal = 8.dp,
+                vertical =
+                if (status == null) {
+                    6.dp
+                } else {
+                    3.dp
+                }
+            )
+            .clip(shape)
+            .background(
+                swipeBackgroundColor
+            )
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Text(text = student,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(8.dp))
+
+        /*
+         * Labels underneath the moving card.
+         */
+        Row(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(horizontal = 18.dp),
+
+            verticalAlignment =
+            Alignment.CenterVertically,
+
+            horizontalArrangement =
+            Arrangement.SpaceBetween
+        ) {
+
+            Text(
+                text =
+                if (dragOffset > 15f) {
+                    "PRESENT"
+                } else {
+                    ""
+                },
+                color = Color.White,
+                style =
+                MaterialTheme.typography.labelLarge
+            )
+
+            Text(
+                text =
+                if (dragOffset < -15f) {
+                    "ABSENT"
+                } else {
+                    ""
+                },
+                color = Color.White,
+                style =
+                MaterialTheme.typography.labelLarge
+            )
+        }
+
+        /*
+         * Actual student card.
+         */
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+
+                /*
+                 * Physically move the card while
+                 * the finger moves.
+                 */
+                .offset {
+                    IntOffset(
+                        x = dragOffset.roundToInt(),
+                        y = 0
+                    )
+                }
+
+                /*
+                 * Collapse smoothly after a status
+                 * has been selected.
+                 */
+                .animateContentSize(
+                    animationSpec =
+                    tween(durationMillis = 180)
+                )
+
+                /*
+                 * Horizontal swipe recognizer.
+                 *
+                 * LazyColumn vertical scrolling still works
+                 * because this detector waits specifically
+                 * for a horizontal gesture.
+                 */
+                .pointerInput(student) {
+
+                    detectHorizontalDragGestures(
+
+                        onDragEnd = {
+
+                            when {
+
+                                dragOffset >=
+                                        swipeThreshold -> {
+
+                                    markAttendance(
+                                        AttendanceStatus.PRESENT
+                                    )
+                                }
+
+                                dragOffset <=
+                                        -swipeThreshold -> {
+
+                                    markAttendance(
+                                        AttendanceStatus.ABSENT
+                                    )
+                                }
+                            }
+
+                            /*
+                             * Return card to its normal
+                             * horizontal position.
+                             */
+                            dragOffset = 0f
+                        },
+
+                        onDragCancel = {
+                            dragOffset = 0f
+                        },
+
+                        onHorizontalDrag = {
+                                change,
+                                dragAmount ->
+
+                            change.consume()
+
+                            dragOffset =
+                                (
+                                        dragOffset +
+                                                dragAmount
+                                        ).coerceIn(
+                                        -maximumSwipe,
+                                        maximumSwipe
+                                    )
+                        }
+                    )
+                },
+
+            shape = shape,
+
+            colors = CardDefaults.cardColors(
+                containerColor =
+                Color.Transparent
+            ),
+
+            elevation =
+            CardDefaults.cardElevation(
+                defaultElevation =
+                if (
+                    status == null
+                ) {
+                    8.dp
+                } else {
+                    4.dp
+                }
+            )
+        ) {
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        color = when (selectedStatus) {
-                            AttendanceStatus.PRESENT -> Color(0xFF388E3C)
-                            AttendanceStatus.LATE -> Color(0xFFFBC02D)
-                            AttendanceStatus.ABSENT -> Color(0xFFD32F2F)
-                            else -> Color.Transparent
-                        },
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    .padding(8.dp)
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface,
 
-            ) {
-                if (selectedStatus == null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceAround
-                    ) {
-                        AttendanceOption(
-                            AttendanceStatus.PRESENT,
-                            Color(0xFF388E3C),
-                            painterResource(id = R.drawable.present_icon),
-                            {
-                                selectedStatus = AttendanceStatus.PRESENT
-                                onAttendanceStatusChange(AttendanceStatus.PRESENT)
-                            }
-                        )
-                        AttendanceOption(
-                            AttendanceStatus.LATE,
-                            Color(0xFFFBC02D),
-                            painterResource(id = R.drawable.late_icon),
-                            {
-                                selectedStatus = AttendanceStatus.LATE
-                                onAttendanceStatusChange(AttendanceStatus.LATE)
-                            }
-                        )
-                        AttendanceOption(
-                            AttendanceStatus.ABSENT,
-                            Color(0xFFD32F2F),
-                            painterResource(id = R.drawable.absent_icon),
-                            {
-                                selectedStatus = AttendanceStatus.ABSENT
-                                onAttendanceStatusChange(AttendanceStatus.ABSENT)
-                            }
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (selectedStatus != null) {
-                            Image(
-                                painter = when (selectedStatus!!) {
-                                    AttendanceStatus.PRESENT -> painterResource(id = R.drawable.present_icon)
-                                    AttendanceStatus.LATE -> painterResource(id = R.drawable.late_icon)
-                                    AttendanceStatus.ABSENT -> painterResource(id = R.drawable.absent_icon)
-                                },
-                                contentDescription = null,
-                                modifier = Modifier.size(30.dp)
+                                statusColor.copy(
+                                    alpha =
+                                    if (
+                                        status ==
+                                        null
+                                    ) {
+                                        0.65f
+                                    } else {
+                                        0.45f
+                                    }
+                                )
                             )
-                        } else {
-                            Text(text = "Pending", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = when (selectedStatus) {
-                                AttendanceStatus.PRESENT -> "Present"
-                                AttendanceStatus.LATE -> "Late"
-                                AttendanceStatus.ABSENT -> "Absent"
-                                else -> ""
-                            },
-                            style = MaterialTheme.typography.bodyMedium
                         )
-                    }
+                    )
+            ) {
+
+                /*
+                 * Pending cards are larger.
+                 *
+                 * Once attendance is selected,
+                 * switch to the compact card.
+                 */
+                if (status == null) {
+
+                    PendingStudentContent(
+                        student = student,
+                        photoBase64 = photoBase64,
+
+                        onLate = {
+                            markAttendance(
+                                AttendanceStatus.LATE
+                            )
+                        }
+                    )
+
+                } else {
+
+                    CompactStudentContent(
+                        student = student,
+                        photoBase64 = photoBase64,
+                        status = status!!,
+
+                        onLate = {
+                            markAttendance(
+                                AttendanceStatus.LATE
+                            )
+                        }
+                    )
                 }
             }
         }
     }
 }
 
+@Composable
+private fun PendingStudentContent(
+    student: String,
+    photoBase64: String?,
+    onLate: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = 12.dp,
+                vertical = 10.dp
+            ),
+
+        verticalAlignment =
+        Alignment.CenterVertically
+    ) {
+
+        StudentPortrait(
+            student = student,
+            photoBase64 = photoBase64,
+            compact = false
+        )
+
+        Spacer(
+            modifier = Modifier.width(12.dp)
+        )
+
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+
+            Text(
+                text = student,
+                style =
+                MaterialTheme.typography.bodyLarge,
+                color =
+                MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(
+                modifier = Modifier.height(5.dp)
+            )
+
+            Text(
+                text = "Swipe right for Present • left for Absent",
+                style =
+                MaterialTheme.typography.bodySmall,
+                color =
+                MaterialTheme.colorScheme
+                    .onSurface
+                    .copy(alpha = 0.7f)
+            )
+        }
+
+        /*
+         * Tardiness remains a button because both
+         * horizontal swipe directions are already used.
+         */
+        IconButton(
+            onClick = onLate,
+            modifier = Modifier.size(44.dp)
+        ) {
+            Icon(
+                painter = painterResource(
+                    id = R.drawable.late_icon
+                ),
+                contentDescription = "Mark Late",
+                tint = Color(0xFFFBC02D),
+                modifier = Modifier.size(26.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttendanceStatusBadge(
+    status: AttendanceStatus
+) {
+    val color =
+        when (status) {
+            AttendanceStatus.PRESENT ->
+                Color(0xFF388E3C)
+
+            AttendanceStatus.LATE ->
+                Color(0xFFFBC02D)
+
+            AttendanceStatus.ABSENT ->
+                Color(0xFFD32F2F)
+        }
+
+    val label =
+        when (status) {
+            AttendanceStatus.PRESENT ->
+                "Present"
+
+            AttendanceStatus.LATE ->
+                "Late"
+
+            AttendanceStatus.ABSENT ->
+                "Absent"
+        }
+
+    val icon =
+        when (status) {
+            AttendanceStatus.PRESENT ->
+                R.drawable.present_icon
+
+            AttendanceStatus.LATE ->
+                R.drawable.late_icon
+
+            AttendanceStatus.ABSENT ->
+                R.drawable.absent_icon
+        }
+
+    Row(
+        modifier = Modifier
+            .clip(
+                RoundedCornerShape(50)
+            )
+            .background(
+                color.copy(alpha = 0.18f)
+            )
+            .border(
+                width = 1.dp,
+                color = color,
+                shape =
+                RoundedCornerShape(50)
+            )
+            .padding(
+                horizontal = 9.dp,
+                vertical = 5.dp
+            ),
+
+        verticalAlignment =
+        Alignment.CenterVertically
+    ) {
+
+        Icon(
+            painter =
+            painterResource(id = icon),
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(17.dp)
+        )
+
+        Spacer(
+            modifier = Modifier.width(4.dp)
+        )
+
+        Text(
+            text = label,
+            style =
+            MaterialTheme.typography.labelMedium,
+            color = color
+        )
+    }
+}
+
+@Composable
+private fun CompactStudentContent(
+    student: String,
+    photoBase64: String?,
+    status: AttendanceStatus,
+    onLate: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = 10.dp,
+                vertical = 6.dp
+            ),
+
+        verticalAlignment =
+        Alignment.CenterVertically
+    ) {
+
+        /*
+         * Much smaller portrait once marked.
+         */
+        StudentPortrait(
+            student = student,
+            photoBase64 = photoBase64,
+            compact = true
+        )
+
+        Spacer(
+            modifier = Modifier.width(10.dp)
+        )
+
+        Text(
+            text = student,
+            style =
+            MaterialTheme.typography.bodyMedium,
+            color =
+            MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+
+        AttendanceStatusBadge(
+            status = status
+        )
+
+        /*
+         * If it isn't already late, keep a small
+         * one-tap way to mark tardiness.
+         */
+        if (
+            status != AttendanceStatus.LATE
+        ) {
+
+            Spacer(
+                modifier = Modifier.width(4.dp)
+            )
+
+            IconButton(
+                onClick = onLate,
+                modifier = Modifier.size(38.dp)
+            ) {
+                Icon(
+                    painter = painterResource(
+                        id = R.drawable.late_icon
+                    ),
+                    contentDescription = "Mark Late",
+                    tint = Color(0xFFFBC02D),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun StudentPortrait(
+    student: String,
+    photoBase64: String?,
+    compact: Boolean
+) {
+    val imageBitmap =
+        remember(photoBase64) {
+
+            if (photoBase64.isNullOrBlank()) {
+                null
+            } else {
+
+                try {
+
+                    val bytes =
+                        Base64.decode(
+                            photoBase64,
+                            Base64.DEFAULT
+                        )
+
+                    BitmapFactory
+                        .decodeByteArray(
+                            bytes,
+                            0,
+                            bytes.size
+                        )
+                        ?.asImageBitmap()
+
+                } catch (e: Exception) {
+
+                    Timber.tag(
+                        "StudentPortrait"
+                    ).w(
+                        e,
+                        "Unable to decode photo for $student"
+                    )
+
+                    null
+                }
+            }
+        }
+
+    val width =
+        if (compact) {
+            42.dp
+        } else {
+            68.dp
+        }
+
+    val height =
+        if (compact) {
+            52.dp
+        } else {
+            86.dp
+        }
+
+    if (imageBitmap != null) {
+
+        Image(
+            bitmap = imageBitmap,
+
+            contentDescription =
+            "Photo of $student",
+
+            modifier = Modifier
+                .width(width)
+                .height(height)
+                .clip(
+                    RoundedCornerShape(
+                        if (compact) {
+                            8.dp
+                        } else {
+                            12.dp
+                        }
+                    )
+                ),
+
+            contentScale =
+            ContentScale.Crop
+        )
+
+    } else {
+
+        /*
+         * Fallback for old/manual groups that don't
+         * have photographs.
+         */
+        val initials =
+            student
+                .split(" ")
+                .filter {
+                    it.isNotBlank()
+                }
+                .take(2)
+                .joinToString("") {
+                    it.take(1).uppercase()
+                }
+
+        Box(
+            modifier = Modifier
+                .width(width)
+                .height(height)
+                .clip(
+                    RoundedCornerShape(
+                        if (compact) {
+                            8.dp
+                        } else {
+                            12.dp
+                        }
+                    )
+                )
+                .background(
+                    MaterialTheme
+                        .colorScheme
+                        .surfaceVariant
+                ),
+
+            contentAlignment =
+            Alignment.Center
+        ) {
+
+            Text(
+                text = initials,
+                style =
+                if (compact) {
+                    MaterialTheme
+                        .typography
+                        .labelLarge
+                } else {
+                    MaterialTheme
+                        .typography
+                        .headlineSmall
+                }
+            )
+        }
+    }
+}
 
 @Composable
 fun AttendanceOption(

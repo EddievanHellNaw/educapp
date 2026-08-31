@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -29,8 +31,13 @@ import com.example.educapp.commons.ui.HapticButton
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import com.example.educapp.commons.ui.CircularButton
 import com.example.educapp.R
+import com.example.educapp.commons.ui.hapticClickable
 
 
 @Composable
@@ -63,97 +70,106 @@ fun ClassworkPartialScreen(
                 if (partials.isEmpty()) {
                     EmptyStateMessage()
                 } else {
-                    ClassworkList(
+                    ClassworkGroupedList(
                         partials = partials,
                         activities = activities,
-                        attendanceViewModel = attendanceViewModel, // Add this
-                        onApprove = { viewModel.approvePartial(it.id) },
                         groupId = groupId,
-                        navController = navController // Add this
+                        navController = navController
                     )
                 }
             }
         }
-
         // CircularButton appears in ALL states (loading, error, empty list)
         CircularButton(
             imageResId = R.drawable.activity_icon,
             isLarge = true,
-            onClick = { navController.navigate("assistant/${groupId}") }
+            onClick = { navController.navigate("assistant/${groupId}") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)   // Bottom right
+                .padding(16.dp)              // Some spacing from edges
         )
     }
 }
 
 @Composable
-private fun ClassworkList(
+fun PartialGroupCard(
+    partialNumber: Int,
+    activities: List<ClassworkActivity>,
+    navController: NavHostController,
+    groupId: String  // New parameter
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    GradientCard(
+        onClick = { expanded = !expanded },
+        modifier = Modifier.padding(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Partial $partialNumber",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand"
+                )
+            }
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                if (activities.isEmpty()) {
+                    Text("No activities found for this partial.")
+                } else {
+                    // Make each activity clickable to navigate to detail
+                    activities.forEach { activity ->
+                        Text(
+                            text = "• ${activity.title}",
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .hapticClickable {
+                                    navController.navigate("activityDetail/$groupId/${activity.id}")
+                                }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+@Composable
+private fun ClassworkGroupedList(
     partials: List<ClassworkPartial>,
     activities: List<ClassworkActivity>,
-    attendanceViewModel: AttendanceViewModel, // Add this parameter
-    onApprove: (ClassworkPartial) -> Unit,
-    groupId: String,
-    navController: NavHostController
+    navController: NavHostController,
+    groupId: String
 ) {
+    // Group partials by partialNumber
+    val groupedPartials = partials.groupBy { it.partialNumber }
+    // Sort the groups by partial number (ascending)
+    val sortedGroupKeys = groupedPartials.keys.sorted()
+
     LazyColumn {
-        items(partials) { partial ->
-            // Get group for this partial
-            val group by attendanceViewModel.getGroupById(partial.groupId)
-                .collectAsState(initial = null)
-
-            val partialActivities = activities
-                .filter { it.partialId == partial.id }
-                .sortedBy { it.dueDate }
-
-            PartialClassworkCard(
-                partial = partial,
-                activities = partialActivities,
-                group = group,
-                onApprove = { onApprove(partial) },
-                onSelect = {
-                    // Add navigation to partial detail
-                    navController.navigate("partialDetail/${partial.id}")
-                }
+        items(sortedGroupKeys) { partialNumber ->
+            // Get the list of partials in this group
+            val groupPartials = groupedPartials[partialNumber] ?: emptyList()
+            // Merge activities from all partials in this group
+            val groupActivities = activities.filter { activity ->
+                groupPartials.any { partial -> partial.id == activity.partialId }
+            }
+            PartialGroupCard(
+                partialNumber = partialNumber,
+                activities = groupActivities,
+                navController = navController,
+                groupId = groupId
             )
         }
     }
 }
 
-@Composable
-private fun PartialClassworkCard(
-    partial: ClassworkPartial,
-    activities: List<ClassworkActivity>,
-    group: AttendanceGroup?,
-    onApprove: () -> Unit,
-    onSelect: () -> Unit
-) {
-    // Handle null group case
-    val groupName = group?.name ?: "Unknown Group"
-    val groupColor = group?.getColor() ?: MaterialTheme.colorScheme.surface
-
-    GradientCard (
-        onClick = onSelect,
-        modifier = Modifier.padding(8.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Partial ${partial.partialNumber}", style = MaterialTheme.typography.titleLarge)
-            Text(groupName, style = MaterialTheme.typography.bodyMedium)
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                HapticButton(onClick = onApprove) {
-                    Text("Approve")
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = partial.status.name,
-                    color = when (partial.status) {
-                        ClassworkStatus.DRAFT -> MaterialTheme.colorScheme.onSurfaceVariant
-                        ClassworkStatus.APPROVED -> MaterialTheme.colorScheme.primary
-                        ClassworkStatus.ARCHIVED -> MaterialTheme.colorScheme.error
-                    }
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun EmptyStateMessage() {

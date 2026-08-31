@@ -58,8 +58,8 @@ fun TeacherMainScreen(navController: NavController,teacherUserName: String, even
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CircularButton(imageResId = R.drawable.group_icon, onClick = { navController.navigate("teacher/groups") })
                 CircularButton(imageResId = R.drawable.calendar_icon, onClick = { navController.navigate("teacher/calendar") })
+                CircularButton(imageResId = R.drawable.group_icon, isLarge = true, onClick = { navController.navigate("teacher/groups") })
                 CircularButton(imageResId = R.drawable.notes_icon, onClick = { navController.navigate("annotation") })
             }
         }

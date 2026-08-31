@@ -359,6 +359,7 @@ class ClassworkViewModel(
                 deserializer = ListSerializer(ClassworkActivity.serializer()),
                 string = response
             )
+
         } catch (e: Exception) {
             Timber.e(e, "Failed to parse AI response")
             emptyList()

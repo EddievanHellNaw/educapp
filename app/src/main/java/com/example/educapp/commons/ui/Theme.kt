@@ -228,37 +228,52 @@ fun GradientCard(
     pressedElevation: Dp = 4.dp,
     content: @Composable () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
+    val interactionSource = remember {
+        MutableInteractionSource()
+    }
+
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val currentElevation by animateDpAsState(
-        targetValue = if (isPressed) pressedElevation else defaultElevation,
-        animationSpec = tween(200)
+        targetValue = if (isPressed) {
+            pressedElevation
+        } else {
+            defaultElevation
+        },
+        animationSpec = tween(200),
+        label = "cardElevation"
     )
 
     Card(
-        modifier = modifier
-            .shadow(
-                elevation = currentElevation,
-                shape = shape,
-                ambientColor = MaterialTheme.colorScheme.outlineVariant,
-                spotColor = MaterialTheme.colorScheme.outline
-            )
-            .then(
-                if (onClick != null) {
-                    Modifier.hapticClickable(
-                        onClick = onClick
-                    )
-                } else {
-                    Modifier
-                }
-            ),
+        modifier = modifier,
         shape = shape,
-        elevation = CardDefaults.cardElevation(0.dp) // Disable default elevation
+
+        // Make the Card itself visually transparent.
+        // The Box below provides the gradient.
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent
+        ),
+
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = currentElevation
+        )
     ) {
         Box(
             modifier = Modifier
-                .background(gradientBrush)
+                .fillMaxWidth()
+                .background(
+                    brush = gradientBrush,
+                    shape = shape
+                )
+                .then(
+                    if (onClick != null) {
+                        Modifier.hapticClickable {
+                            onClick()
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
                 .padding(16.dp)
         ) {
             content()
@@ -306,7 +321,6 @@ fun FrostedGlassTextField(
                 spotColor = MaterialTheme.colorScheme.secondary
             )
             // Apply an actual blur if you like. This is optional & experimental
-            .blur(radius = 10.dp)
             // Translucent background to mimic frosted glass
             .background(
                 color = frostedSurface,

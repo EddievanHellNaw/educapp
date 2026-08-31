@@ -39,7 +39,9 @@ import com.example.educapp.commons.calendar.EventDetailsScreen
 import com.example.educapp.commons.student.StudentMainScreen
 import com.example.educapp.commons.teacher.TeacherMainScreen
 import com.example.educapp.commons.assistant.AssistantScreen
+import com.example.educapp.commons.classwork.ActivityDetailScreen
 import com.example.educapp.commons.classwork.ClassworkPartialScreen
+import com.example.educapp.commons.classwork.PartialDetailScreen
 import com.example.educapp.commons.teacher.attendance.AttendanceScreen
 import com.example.educapp.commons.teacher.attendance.AttendanceViewModel
 import com.example.educapp.commons.teacher.attendance.CheckScreen
@@ -340,9 +342,12 @@ fun MyApp(
             ) { backStackEntry ->
                 val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
                 val partial = backStackEntry.arguments?.getInt("partial") ?: 1
+
                 val viewModel: GradesViewModel = koinViewModel()
                 CheckGradesScreen(navController, viewModel, groupId, partial)
             }
+
+
 
             // In your NavGraph definition
             composable("classwork/{groupId}") { backStackEntry ->
@@ -353,6 +358,18 @@ fun MyApp(
                 )
             }
         }
+        composable("partialDetail/{partialId}") { backStackEntry ->
+            val partialId = backStackEntry.arguments?.getString("partialId") ?: ""
+            PartialDetailScreen(partialId = partialId)
+        }
+
+        composable("activityDetail/{groupId}/{activityId}") { backStackEntry ->
+            val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+            val activityId = backStackEntry.arguments?.getString("activityId") ?: ""
+            ActivityDetailScreen(activityId = activityId, groupId = groupId)
+        }
+
+
 
         composable("assistant/{groupId}") { backStackEntry ->
             val groupId = backStackEntry.arguments?.getString("groupId") ?: ""

@@ -84,7 +84,7 @@ fun AssistantScreen(
         if (generatedActivities.isNotEmpty()) {
             ActivityPreviewOverlay(
                 activities = generatedActivities,
-                groupId = groupId, // Pass groupId down
+                groupId = groupId, // Pass groupId down.
                 onApprove = { viewModel.confirmActivities() },
                 onCancel = { viewModel.clearGeneratedActivities() }
             )
@@ -448,7 +448,7 @@ fun ActivityPreviewOverlay(
                 )
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(activities) { activity ->
-                        ActivityItem(activity = activity, onApprove = { })
+                        ActivityItem(activity = activity)
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -470,17 +470,14 @@ fun ActivityPreviewOverlay(
 
 
 @Composable
-fun ActivityItem(activity: ClassworkActivity, onApprove: () -> Unit) {
+fun ActivityItem(activity: ClassworkActivity) {
     GradientCard {
         Column(modifier = Modifier.padding(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(activity.title, modifier = Modifier.weight(1f))
 
-                if (activity.status == ClassworkStatus.DRAFT) {
-                    HapticButton(onClick = onApprove) {
-                        Text("Approve")
-                    }
-                } else {
+                // Only show the check icon if it's not draft
+                if (activity.status != ClassworkStatus.DRAFT) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Approved",
@@ -492,6 +489,7 @@ fun ActivityItem(activity: ClassworkActivity, onApprove: () -> Unit) {
         }
     }
 }
+
 
 data class ModelOption(
     val id: String,
